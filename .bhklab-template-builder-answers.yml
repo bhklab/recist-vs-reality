@@ -1,0 +1,14 @@
+# Changes here will be overwritten by Copier
+_commit: v0.10.0
+_src_path: gh:bhklab/bhklab-project-template
+additional_authors_raw: Katy Scott
+author_email: bhklab.caryngeady@gmail.com
+author_full_name: Caryn Geady
+github_username: caryn-geady
+has_additional_authors: true
+project_description: placeholder
+project_name: RECIST vs Reality
+project_slug: recist-vs-reality
+publish_to_github: true
+python_version: '3.12'
+repo_location: bhklab
