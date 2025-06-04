@@ -1,14 +1,25 @@
-import pydicom
 import pandas as pd
+import pydicom
+import click
 
-def find_graphic_data(dataset, current_references, graphic_data_list, file_path):
+def find_graphic_data(dataset: pydicom.Dataset,
+                      file_path: str,
+                      current_references: list | None = None, 
+                      graphic_data_list: dict | None = None, 
+                      ) -> pd.DataFrame:
     """
     Recursively searches through a DICOM dataset to find and extract graphic data and related references.
     """
+    if current_references is None:
+        current_references = []
+
+    if graphic_data_list is None:
+        graphic_data_list = []
+
     for elem in dataset:
         if elem.VR == 'SQ':  # Check for sequences
             for item in elem.value:
-                find_graphic_data(item, current_references, graphic_data_list, file_path)
+                find_graphic_data(item, file_path, current_references, graphic_data_list)
         elif elem.tag == (0x0070, 0x0022):  # Graphic Data tag
             graphic_type = current_references.get('GraphicType', 'Unknown')
             content_description = current_references.get('ContentDescription', 'Unknown')
@@ -51,15 +62,18 @@ def find_graphic_data(dataset, current_references, graphic_data_list, file_path)
         elif elem.tag == (0x0070, 0x0084):  # Content Description
             current_references['ContentDescription'] = elem.value
 
-def extract_graphic_data_with_references(file_path):
+
+def extract_graphic_data_with_references(file_path: str):
     """
     Extract all graphic data and their references from a DICOM SR file.
     """
     ds = pydicom.dcmread(file_path)
     graphic_data_list = []
-    find_graphic_data(ds, {}, graphic_data_list, file_path)
+    find_graphic_data(ds, file_path, {}, graphic_data_list)
     return pd.DataFrame(graphic_data_list)
 
+
 # Example usage
-dicom_file_path = "/home/bhkuser3/RECIST-play/rawdata/structreports/OCT01-1123-COB4702_1.dcm"
+dicom_file_path = "data/rawdata/TCIA_CPTAC-HNSCC/images/annotations/CPTAC-HNSCC/animated.peafowl-CPTAC-HNSCC-C3N-00828-1.3.6.1.4.1.14519.5.2.1.3320.3273.324519151134894128406738207272.dcm"
 graphic_data_df = extract_graphic_data_with_references(dicom_file_path)
+print(graphic_data_df)
