@@ -22,7 +22,9 @@ nav:
   - Home: index.md
   - Usage: usage.md
   - Data Sources: data_sources.md
-  - Developer Notes: devnotes.md
+  - Developer Notes: 
+    - Caryn: 'devnotes/devnotes_caryn.md'
+    - Katy: 'devnotes/devnotes_katy.md'
 
 theme: readthedocs
 
