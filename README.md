@@ -1,10 +1,10 @@
 # RECIST vs Reality
 
-**Authors:** [Caryn Geady](https://github.com/caryn-geady), Katy Scott
+**Authors:** [Caryn Geady](https://github.com/caryn-geady), [Katy Scott](https://github.com/strixy16)
 
 **Contact:** [bhklab.caryngeady@gmail.com](mailto:bhklab.caryngeady@gmail.com)
 
-**Description:** placeholder
+**Description:** Code for RECIST to Reality manuscript.
 
 --------------------------------------
 
