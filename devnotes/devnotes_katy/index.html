@@ -57,19 +57,11 @@
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" href="#">Katy</a>
     <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#purpose-of-this-section">Purpose of This Section</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#what-to-document">What to Document</a>
+    <li class="toctree-l2"><a class="reference internal" href="#sr-exploration">SR Exploration</a>
         <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#design-decisions">Design Decisions</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#technical-challenges">Technical Challenges</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#dependencies-and-environment">Dependencies and Environment</a>
+    <li class="toctree-l3"><a class="reference internal" href="#2025-06-04">[2025-06-04]</a>
     </li>
         </ul>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#best-practices">Best Practices</a>
     </li>
     </ul>
                   </li>
@@ -100,46 +92,70 @@
             <div class="section" itemprop="articleBody">
               
                 <h1 id="developer-notes-katy">Developer Notes - Katy</h1>
-<h2 id="purpose-of-this-section">Purpose of This Section</h2>
-<p>This section is for documenting technical decisions, challenges, and solutions encountered during your project. These notes are valuable for:</p>
+<h2 id="sr-exploration">SR Exploration</h2>
+<h4 id="2025-06-04">[2025-06-04]</h4>
 <ul>
-<li>Future you (who will forget why certain decisions were made)</li>
-<li>Collaborators who join the project later</li>
-<li>People coming from your publication who want to reproduce your work</li>
-<li>Anyone who might want to extend your research</li>
+<li>SR's can be read by MIT index, but it looks like at least the CCC HNSCC ones don't have a ReferenceSeriesUID</li>
+<li>From Caryn's <code>sr_testing.py</code> script, there is a ReferencedSOPInstanceUID, which means we can determine the slice, just gotta figure out in what CT</li>
 </ul>
-<h2 id="what-to-document">What to Document</h2>
-<h3 id="design-decisions">Design Decisions</h3>
-<p>Document important decisions about your project's architecture, algorithms, or methodologies:</p>
+<!---
+## Purpose of This Section
+
+This section is for documenting technical decisions, challenges, and solutions encountered during your project. These notes are valuable for:
+
+- Future you (who will forget why certain decisions were made)
+- Collaborators who join the project later
+- People coming from your publication who want to reproduce your work
+- Anyone who might want to extend your research
+
+## What to Document
+
+### Design Decisions
+
+Document important decisions about your project's architecture, algorithms, or methodologies:
+
+
 <pre><code class="language-markdown">## Choice of RNA-Seq Analysis Pipeline
 
 [2025-04-25] We chose the kallisto over STAR pipeline for the following reasons:
     1. The CCLE dataset is very large, and kallisto is faster for quantifying large datasets
     2. GDSC used kallisto, so we can compare our results with theirs
 </code></pre>
-<h3 id="technical-challenges">Technical Challenges</h3>
-<p>Record significant problems you encountered and how you solved them</p>
+
+
+### Technical Challenges
+
+Record significant problems you encountered and how you solved them
+
+
 <pre><code class="language-markdown">## Sample Name Format Issue
 
 [2025-04-25] We encountered a problem with sample name formats between the CCLE and GDSC datasets.
     The CCLE dataset uses &quot;BRCA-XX-XXXX&quot; format, while the GDSC dataset uses &quot;BRCA-XX-XXXX-XX&quot;.
     We had to write a script to remove the last two characters from the sample names in the GDSC dataset.
 </code></pre>
-<h3 id="dependencies-and-environment">Dependencies and Environment</h3>
-<p>Document specific version requirements or compatibility issues:</p>
+
+
+### Dependencies and Environment
+
+Document specific version requirements or compatibility issues:
+
+
 <pre><code class="language-markdown">## Critical Version Dependencies
 
 [2025-04-25] SimpleITK 2.4.1 introduced a bug that flips images, so we froze version 2.4.0
 </code></pre>
-<h2 id="best-practices">Best Practices</h2>
-<ul>
-<li>Date your entries when appropriate</li>
-<li>Link to relevant code files or external resources</li>
-<li>Include small code snippets when helpful</li>
-<li>Note alternatives you considered and why they were rejected</li>
-<li>Document failed approaches to prevent others from repeating mistakes</li>
-<li>Update notes when major changes are made to the approach</li>
-</ul>
+
+
+## Best Practices
+
+- Date your entries when appropriate
+- Link to relevant code files or external resources
+- Include small code snippets when helpful
+- Note alternatives you considered and why they were rejected
+- Document failed approaches to prevent others from repeating mistakes
+- Update notes when major changes are made to the approach
+-->
               
             </div>
           </div><footer>
