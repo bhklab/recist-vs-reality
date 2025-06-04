@@ -63,6 +63,8 @@
     </li>
         </ul>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#data-notes">Data Notes</a>
+    </li>
     </ul>
                   </li>
               </ul>
@@ -98,6 +100,45 @@
 <li>SR's can be read by MIT index, but it looks like at least the CCC HNSCC ones don't have a ReferenceSeriesUID</li>
 <li>From Caryn's <code>sr_testing.py</code> script, there is a ReferencedSOPInstanceUID, which means we can determine the slice, just gotta figure out in what CT</li>
 </ul>
+<h2 id="data-notes">Data Notes</h2>
+<table>
+<thead>
+<tr>
+<th><strong>CPTAC-HNSCC</strong></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Annotation files</td>
+<td>15</td>
+</tr>
+<tr>
+<td>Unique annotation ReferenceSeriesUIDs</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Images with SeriesUIDs referenced by annotation</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Masks with the same ReferenceSeriesuUIDs</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Images with masks and annotations</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Images with at least one mask, no annotation</td>
+<td>97</td>
+</tr>
+<tr>
+<td>Images with at least one annotation, no mask</td>
+<td>8</td>
+</tr>
+</tbody>
+</table>
 <!---
 ## Purpose of This Section
 
