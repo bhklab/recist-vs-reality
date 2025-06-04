@@ -48,7 +48,21 @@
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#project-configuration">Project Configuration</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#data-setup">Data Setup</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#raw-data">Raw Data</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#processed-data">Processed Data</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#results">Results</a>
+    </li>
+        </ul>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#running-your-analysis">Running Your Analysis</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#1-running-med-imagetools">1. Running Med-ImageTools</a>
+    </li>
+        </ul>
     </li>
     </ul>
                 </li>
@@ -90,10 +104,77 @@
               
                 <h1 id="usage-guide">Usage Guide</h1>
 <h2 id="project-configuration">Project Configuration</h2>
-<p>TODO:: discuss how to edit the configuration files in the <code>config/</code> directory to match your research parameters</p>
-<p>TODO:: discuss how to add your input data to the <code>data/rawdata/</code> directory and document it properly in the <code>docs/data_sources/</code> directory</p>
-<p>TODO:: discuss how to manage and organize your data sources effectively</p>
+<p>Each dataset needs a configuration file with the following settings filled in</p>
+<pre><code>DATA_SOURCE: &quot;&quot;    # where the data came from, will be used for data organization
+DATASET_NAME: &quot;&quot;   # the name of the dataset , will be use for data organization
+
+### MED-IMAGETOOLS settings
+MIT:
+    MODALITIES:                 # Modalities to process with autopipeline
+        image: CT
+        mask: RTSTRUCT     
+    ROI_STRATEGY: MERGE         # How to handle multiple ROI matches 
+    ROI_MATCH_MAP:              # Matching map for ROIs in dataset (use if you only want to process some of the masks in a segmentation)
+        KEY:ROI_NAME            # NOTE: there can be no spaces in KEY:ROI_NAME
+</code></pre>
+<h2 id="data-setup">Data Setup</h2>
+<p>The following sections describe how to set up the data you wish to process with this pipeline following the BHKLab Data Management Protocol (DMP). This will ensure data remains separate from the project directory and accessible to other users.</p>
+<h3 id="raw-data">Raw Data</h3>
+<p>Set up a separate main data directory outside of the project directory. We'll call this <code>Datasets</code>.</p>
+<p>In <code>Datasets</code>, set up a directory for the dataset you wish to process as follows:</p>
+<pre><code class="language-bash">Datasets
+|---- {DATASET_SOURCE}_{DATASET_NAME}
+      |-- clinical
+      |   `-- {Clinical Data File}.csv OR {Clinical Data File}.xlsx
+      `-- images
+          |-- {DATASET_NAME}
+          |   |-- {PatientID}
+          |   |   `-- {StudyUID}
+          |   |       |-- {Image DICOM directory}
+          |   |       |   |-- 1-01.dcm
+          |   |       |   |-- ...
+          |   |       |   |-- 1-N.dcm
+          |   |       |-- {Mask DICOM directory}
+          |   |       |   `-- 1-01.dcm
+          |   |-- {PatientID}
+          |   |-- ...
+          |   `-- {PatientID}
+          `-- annotations
+              `-- {DATASET_NAME}
+                  |-- DICOM-SR_annotation_file.dcm
+                  |-- DICOM-SR_annotation_file.dcm
+                  `-- DICOM-SR_annotation_file.dcm
+</code></pre>
+<p>Image directory structure may vary depending on the source. This example is based on the structure setup by TCIA when downloading with a manifest file.</p>
+<p>!!! note "BHKLab DMP Setup"
+    If using the BHKLab DMP, the <code>Datasets</code> directory will be structured with <code>rawdata/{DiseaseRegion}/{DATASET_SOURCE}_{DATASET_NAME}</code>. In the next step, you can create the symbolic link starting from <code>{DATASET_SOURCE}_{DATASET_NAME}</code>.</p>
+<p>Once this data directory is setup, run the following in a terminal from the main directory of the project.</p>
+<pre><code class="language-bash">ln -s /path/to/Datasets/{DATASET_SOURCE}_{DATASET_NAME} data/rawdata
+</code></pre>
+<p>This will create a symbolic link to your dataset in the <code>Datasets</code> directory. </p>
+<p>You can confirm this worked by running:</p>
+<pre><code class="language-bash">ls -l data/rawdata
+</code></pre>
+<p>and you should see,</p>
+<pre><code class="language-bash">total 5
+-rw-rw-r-- 1 bhkuser root 1395 Jun  4 15:21 README.md
+lrwxrwxrwx 1 bhkuser root   80 Jun  4 15:46 {DATASET_SOURCE}_{DATASET_NAME} -&gt; /path/to/Datasets/{DATASET_SOURCE}_{DATASET_NAME}
+</code></pre>
+<p>Now, document the dataset you've added on the <a href="../data_sources/">Data Sources</a> page following the provided template.</p>
+<hr />
+<h3 id="processed-data">Processed Data</h3>
+<p>If you wish to use the BHKLab DMP strategy, follow the process below.</p>
+<p>Create a processed data directory for your dataset in the external <code>Datasets</code> directory as follows:</p>
+<pre><code class="language-bash">mkdir /path/to/Datasets/procdata/{DiseaseRegion}/{DATASET_SOURCE}_{DATASET_NAME}
+</code></pre>
+<p><strong>Note</strong>: the Disease Region must match what is in the <code>rawdata</code> path to the dataset.</p>
+<p>Now you can create a symbolic link to this directory in the project directory, like we did for the raw data.</p>
+<pre><code class="language-bash">ln -s /path/to/Datasets/procdata/{DiseaseRegion}/{DATASET_SOURCE}_{DATASET_NAME} data/procdata
+</code></pre>
+<h3 id="results">Results</h3>
+<p>TODO:: describe results directory setup</p>
 <h2 id="running-your-analysis">Running Your Analysis</h2>
+<h3 id="1-running-med-imagetools">1. Running Med-ImageTools</h3>
 <p>TODO:: discuss using pixi tasks to run the analysis</p>
               
             </div>
