@@ -2,7 +2,7 @@
 
 ## Project Configuration
 
-Each dataset needs a configuration file with the following settings filled in
+Each dataset needs a configuration YAML file with the following settings filled in
 
 ```
 DATA_SOURCE: ""    # where the data came from, will be used for data organization
@@ -17,6 +17,8 @@ MIT:
     ROI_MATCH_MAP:              # Matching map for ROIs in dataset (use if you only want to process some of the masks in a segmentation)
         KEY:ROI_NAME            # NOTE: there can be no spaces in KEY:ROI_NAME
 ```
+
+The file should be saved in the `config` directory and named `{DATASET_NAME}.yaml`.
 
 ## Data Setup
 The following sections describe how to set up the data you wish to process with this pipeline following the BHKLab Data Management Protocol (DMP). This will ensure data remains separate from the project directory and accessible to other users.
@@ -51,6 +53,7 @@ Datasets
                   `-- DICOM-SR_annotation_file.dcm
 ```
 Image directory structure may vary depending on the source. This example is based on the structure setup by TCIA when downloading with a manifest file.
+However, for the pipeline to run correctly, `images/{DATASET_NAME}` must exist in the `{DATASET_SOURCE}_{DATASET_NAME}` directory. Everything within {DATASET_NAME} may vary though.
 
 !!! note "BHKLab DMP Setup"
     If using the BHKLab DMP, the `Datasets` directory will be structured with `rawdata/{DiseaseRegion}/{DATASET_SOURCE}_{DATASET_NAME}`. In the next step, you can create the symbolic link starting from `{DATASET_SOURCE}_{DATASET_NAME}`.
@@ -99,5 +102,29 @@ TODO:: describe results directory setup
 ## Running Your Analysis
 
 ### 1. Running Med-ImageTools
+The first step in the pipeline is to run Med-ImageTools index and autopipeline to organize and process the image and mask data.
 
-TODO:: discuss using pixi tasks to run the analysis
+Requirements:
+    1. You've set up a dataset `config` yaml file as described above.
+    2. You've set up the symbolic links for the dataset in both `rawdata` and `procdata`
+
+From the home project directory, run the following:
+```bash
+pixi run mit config/{DATASET_NAME}.yaml
+```
+
+This will generate NiFTi files for each image and it's corresponding mask, where the masks will be named `KEY__[ROI_NAME]`. The output format should be as follows:
+
+```bash
+data
+`-- procdata
+    `-- {DATASET_SOURCE}_{DATASET_NAME}
+        `-- images
+            `-- mit_{DATASET_NAME}
+                `-- {PatientID}_{SampleNumber}
+                    |-- {ImageModality}_{SeriesInstanceUID}
+                    |   `-- {ImageModality}.nii.gz
+                    `-- {SegmentationModality}_{SeriesInstanceUID}
+                        `-- {KEY}__[{ROI_name}].nii.gz
+
+
