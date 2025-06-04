@@ -6,6 +6,18 @@
 * SR's can be read by MIT index, but it looks like at least the CCC HNSCC ones don't have a ReferenceSeriesUID
 * From Caryn's `sr_testing.py` script, there is a ReferencedSOPInstanceUID, which means we can determine the slice, just gotta figure out in what CT
 
+
+## Data Notes
+| **CPTAC-HNSCC** | |
+|-----------------|-|
+| Annotation files | 15 |
+| Unique annotation ReferenceSeriesUIDs | 10 |
+| Images with SeriesUIDs referenced by annotation | 8 |
+| Masks with the same ReferenceSeriesuUIDs | 4 |
+| Images with masks and annotations | 4 |
+| Images with at least one mask, no annotation | 97 |
+| Images with at least one annotation, no mask | 8 |
+
 <!---
 ## Purpose of This Section
 
