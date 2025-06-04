@@ -10,6 +10,8 @@ fix = true
 extend-exclude = [
     "docs/*", # Skip documentation files
     "tests/*", # Skip test files
+    "workflow/notebooks/example_notebook.ipynb", # Skip example notebook
+    "workflow/notebooks/example_script.py", # Skip example script
 
 ]
 # Set the ruff cache directory
