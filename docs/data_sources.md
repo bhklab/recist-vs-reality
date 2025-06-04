@@ -1,5 +1,44 @@
 # Data Sources
 
+## External Data Sources
+
+### CPTAC-HNSCC
+- **Name**: The Clinical Proteomic Tumor Analysis Consortium Head and Neck Squamous Cell Carcinoma Collection
+- **Version/Date**: Version 14 or 15?
+- **URL**: <https://www.cancerimagingarchive.net/collection/cptac-hnscc/>
+- **Access Method**: NBIA Data Retriever
+- **Access Date**: 2024-03-29
+- **Data Format**: DICOM-CT, DICOM-RTSTRUCT
+- **Citation**: National Cancer Institute Clinical Proteomic Tumor Analysis Consortium (CPTAC). (2018). The Clinical Proteomic Tumor Analysis Consortium Head and Neck Squamous Cell Carcinoma Collection (CPTAC-HNSCC) (Version 19) [dataset]. The Cancer Imaging Archive. https://doi.org/10.7937/k9/tcia.2018.uw45nh81
+- **License**: [TCIA Restricted License](https://wiki.cancerimagingarchive.net/download/attachments/4556915/TCIA%20Restricted%20License%2020220519.pdf?api=v2)
+- **Data Types**: 
+    - Images: CT, RTSTRUCT
+- **Sample Size Selected**: TBD
+- **PatientIDs**: 
+    * C3N-00297
+    * C3N-00498
+    * C3N-00828
+    * C3N-01620
+    * C3N-01752
+    * C3N-01754
+    * C3N-01757
+    * C3N-01943
+    * C3N-01948
+
+### Crowds-Cure-2018
+- **Name**: Crowds Cure Cancer: Data collected at the RSNA 2018 annual meeting
+- **Version/Date**: Version 1: Updated 2019/05/30
+- **URL**: <https://www.cancerimagingarchive.net/analysis-result/crowds-cure-2018/>
+- **Access Method**: NBIA Data Retriever
+- **Access Date**: 2025-03-26
+- **Data Format**: DICOM-SR
+- **Citation**: Urban, T., Ziegler, E., Pieper, S., Kirby, J., Rukas, D., Beardmore, B., Somarouthu, B., Ozkan, E., Lelis, G., Fevrier-Sullivan, B., Nandekar, S., Beers, A., Jaffe, C., Freymann, J., Clunie, D., Harris, G. J., & Kalpathy-Cramer, J. (2019). Crowds Cure Cancer: Crowdsourced data collected at the RSNA 2018 annual meeting [Data set]. The Cancer Imaging Archive. https://doi.org/10.7937/TCIA.2019.yk0gm1eb
+- **License**: [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)
+- **Data Types**: 
+    - Annotations: Structured Reports containing 2D RECIST measurements
+- **Sample Size Selected**: TBD
+
+
 ## Overview
 
 This section should document all data sources used in your project.
