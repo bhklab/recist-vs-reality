@@ -33,9 +33,11 @@ pydicom = ">=3.0.1,<4"
 pandas = ">=2.2.3,<3"
 matplotlib = ">=3.10.3,<4"
 seaborn = ">=0.13.2,<0.14"
+snakemake = ">=9.5.1,<10"
 
 [pypi-dependencies]
 damply = ">=0.10.0, <0.11"
+med-imagetools = ">=2.6.0, <3"
 
 [tasks]
 example_script = {cmd="python $SCRIPTS/example_script.py"}

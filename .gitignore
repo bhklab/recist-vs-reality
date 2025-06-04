@@ -172,3 +172,6 @@ src/testmypixipkg/__pycache__/__init__.cpython-312.pyc
 **.pyc
 
 logs
+
+# Snakemake
+.snakemake
