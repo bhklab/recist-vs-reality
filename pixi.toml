@@ -36,6 +36,7 @@ seaborn = ">=0.13.2,<0.14"
 
 [pypi-dependencies]
 damply = ">=0.10.0, <0.11"
+med-imagetools = ">=2.6.0, <3"
 
 [tasks]
 example_script = {cmd="python $SCRIPTS/example_script.py"}
