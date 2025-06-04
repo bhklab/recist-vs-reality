@@ -9,16 +9,17 @@ rule run_mit_autopipeline:
         output_directory=directory(dmpdirs.PROCDATA / COMBINED_DATA_NAME / "images" / f"mit_{config["DATASET_NAME"]}")
     params:
         modalities=f"{config["MIT"]["MODALITIES"]["image"]},{config["MIT"]["MODALITIES"]["mask"]}",
-        #roi_match_map=config["MIT"]["ROI_MATCH_MAP"],
+        roi_match_map=config["MIT"]["ROI_MATCH_MAP"],
         roi_strategy=config["MIT"]["ROI_STRATEGY"]
     shell:
         """
         imgtools autopipeline {input.input_directory} {output.output_directory} \
         --modalities {params.modalities} \
+        --roi-match-map {params.roi_match_map} \
         --roi-strategy {params.roi_strategy} \
         --filename-format "{{PatientID}}_{{SampleNumber}}/{{Modality}}_{{SeriesInstanceUID}}/{{ImageID}}.nii.gz"
         """
-        # --roi-match-map {params.roi_match_map} \
+        
 
 rule run_mit_index:
     input:
