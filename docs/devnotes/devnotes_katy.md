@@ -1,5 +1,12 @@
 # Developer Notes - Katy
 
+## SR Exploration
+
+#### [2025-06-04]
+* SR's can be read by MIT index, but it looks like at least the CCC HNSCC ones don't have a ReferenceSeriesUID
+* From Caryn's `sr_testing.py` script, there is a ReferencedSOPInstanceUID, which means we can determine the slice, just gotta figure out in what CT
+
+<!---
 ## Purpose of This Section
 
 This section is for documenting technical decisions, challenges, and solutions encountered during your project. These notes are valuable for:
@@ -53,3 +60,4 @@ Document specific version requirements or compatibility issues:
 - Note alternatives you considered and why they were rejected
 - Document failed approaches to prevent others from repeating mistakes
 - Update notes when major changes are made to the approach
+-->
