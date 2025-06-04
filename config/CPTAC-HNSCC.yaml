@@ -7,4 +7,4 @@ MIT:
         image: CT
         mask: RTSTRUCT
     ROI_STRATEGY: SEPARATE
-    ROI_MATCH_MAP: # NOTE: there can be no spaces in KEY:ROI_NAME
+    ROI_MATCH_MAP: GTV:.*
