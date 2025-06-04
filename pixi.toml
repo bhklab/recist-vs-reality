@@ -42,6 +42,10 @@ med-imagetools = ">=2.6.0, <3"
 [tasks]
 example_script = {cmd="python $SCRIPTS/example_script.py"}
 
+[tasks.mit]
+args = ["config"]
+cmd = "snakemake -c 7 --configfile {{ config }}"
+
 ############################################## QUALITY ###############################################
 # Quality includes linting, type checking, and formatting
 [feature.quality.dependencies]
