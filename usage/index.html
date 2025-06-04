@@ -104,7 +104,7 @@
               
                 <h1 id="usage-guide">Usage Guide</h1>
 <h2 id="project-configuration">Project Configuration</h2>
-<p>Each dataset needs a configuration file with the following settings filled in</p>
+<p>Each dataset needs a configuration YAML file with the following settings filled in</p>
 <pre><code>DATA_SOURCE: &quot;&quot;    # where the data came from, will be used for data organization
 DATASET_NAME: &quot;&quot;   # the name of the dataset , will be use for data organization
 
@@ -117,6 +117,7 @@ MIT:
     ROI_MATCH_MAP:              # Matching map for ROIs in dataset (use if you only want to process some of the masks in a segmentation)
         KEY:ROI_NAME            # NOTE: there can be no spaces in KEY:ROI_NAME
 </code></pre>
+<p>The file should be saved in the <code>config</code> directory and named <code>{DATASET_NAME}.yaml</code>.</p>
 <h2 id="data-setup">Data Setup</h2>
 <p>The following sections describe how to set up the data you wish to process with this pipeline following the BHKLab Data Management Protocol (DMP). This will ensure data remains separate from the project directory and accessible to other users.</p>
 <h3 id="raw-data">Raw Data</h3>
@@ -145,7 +146,8 @@ MIT:
                   |-- DICOM-SR_annotation_file.dcm
                   `-- DICOM-SR_annotation_file.dcm
 </code></pre>
-<p>Image directory structure may vary depending on the source. This example is based on the structure setup by TCIA when downloading with a manifest file.</p>
+<p>Image directory structure may vary depending on the source. This example is based on the structure setup by TCIA when downloading with a manifest file.
+However, for the pipeline to run correctly, <code>images/{DATASET_NAME}</code> must exist in the <code>{DATASET_SOURCE}_{DATASET_NAME}</code> directory. Everything within {DATASET_NAME} may vary though.</p>
 <p>!!! note "BHKLab DMP Setup"
     If using the BHKLab DMP, the <code>Datasets</code> directory will be structured with <code>rawdata/{DiseaseRegion}/{DATASET_SOURCE}_{DATASET_NAME}</code>. In the next step, you can create the symbolic link starting from <code>{DATASET_SOURCE}_{DATASET_NAME}</code>.</p>
 <p>Once this data directory is setup, run the following in a terminal from the main directory of the project.</p>
@@ -175,7 +177,21 @@ lrwxrwxrwx 1 bhkuser root   80 Jun  4 15:46 {DATASET_SOURCE}_{DATASET_NAME} -&gt
 <p>TODO:: describe results directory setup</p>
 <h2 id="running-your-analysis">Running Your Analysis</h2>
 <h3 id="1-running-med-imagetools">1. Running Med-ImageTools</h3>
-<p>TODO:: discuss using pixi tasks to run the analysis</p>
+<p>The first step in the pipeline is to run Med-ImageTools index and autopipeline to organize and process the image and mask data.</p>
+<p>Requirements:
+    1. You've set up a dataset <code>config</code> yaml file as described above.
+    2. You've set up the symbolic links for the dataset in both <code>rawdata</code> and <code>procdata</code></p>
+<p>From the home project directory, run the following:</p>
+<pre><code class="language-bash">pixi run mit config/{DATASET_NAME}.yaml
+</code></pre>
+<p>This will generate NiFTi files for each image and it's corresponding mask, where the masks will be named <code>KEY__[ROI_NAME]</code>. The output format should be as follows:</p>
+<p><code>``bash
+data</code>-- procdata
+    <code>-- {DATASET_SOURCE}_{DATASET_NAME}</code>-- images
+            <code>-- mit_{DATASET_NAME}</code>-- {PatientID}<em>{SampleNumber}
+                    |-- {ImageModality}</em>{SeriesInstanceUID}
+                    |   <code>-- {ImageModality}.nii.gz</code>-- {SegmentationModality}_{SeriesInstanceUID}
+                        `-- {KEY}__[{ROI_name}].nii.gz</p>
               
             </div>
           </div><footer>
