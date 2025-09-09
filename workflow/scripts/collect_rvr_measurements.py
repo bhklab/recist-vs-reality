@@ -1,5 +1,6 @@
 import pandas as pd 
 import numpy as np 
+import click
 
 from damply import dirs
 from pathlib import Path
@@ -102,17 +103,34 @@ def get_tumour_measurements(feature_df: pd.DataFrame,
 
     return pat_diag_feat_df 
 
-if __name__ == '__main__':
-
-    feature_path = dirs.RAWDATA / "TCIA_CC-Radiomics-Phantom/features/pyradiomics/pyradiomics_h4h_all_images_features/original_full_features.csv"
-    export_path = dirs.PROCDATA / "TCIA_CC-Radiomics-Phantom/features/rvr_measurements"
+@click.command()
+@click.option('--feat_path', help = 'Path to pyradiomics feature .csv file')
+@click.option('--export_path', help = 'Path to export directory')
+@click.option('--export_filename', help = 'Name of consolidated feature .csv file')
+def create_rvr_measurements(feat_path: str, 
+                            export_path: str,
+                            export_filename: str): 
+    '''
+    Consolidates measurement features from pyradiomics feature file and exports it to a provided destination. 
     
+    Parameters
+    ----------
+    feat_path: str
+        Path to the pyradiomics feature file csv
+    export_path: str
+        Output file path
+    export_filename: str
+        Filename to be concatenated with the export path
+    '''
+    feature_data = pd.read_csv(feat_path)
 
-    feature_data = pd.read_csv(feature_path)
+    consol_feats = get_tumour_measurements(feature_data, diameters = "axis_len")
 
-    volume_diameter_feats = get_tumour_measurements(feature_data, diameters = "axis_len")
-    
+    export_path = Path(export_path)
     if not export_path.exists():
         Path(export_path).mkdir(parents=True, exist_ok = True)
-    
-    volume_diameter_feats.to_csv(export_path / "pyradiomics_measurement_subset_axislen.csv", index = False)
+
+    consol_feats.to_csv(export_path / export_filename, index = False)
+
+if __name__ == '__main__':
+    create_rvr_measurements()
