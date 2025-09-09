@@ -2,6 +2,7 @@ import pandas as pd
 import json 
 import logging
 import pydicom
+import click
 
 from damply import dirs
 from pathlib import Path
@@ -467,30 +468,52 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
 
     return match_info_summary, no_match_info_summary
 
-if __name__ == '__main__': 
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(filename='/home/bhkuser/bhklab/kaitlyn/aaura_paper0/logs/match_no_match_ann_img_seg_NSCLC.log', encoding='utf-8', level=logging.DEBUG)
+@click.command()
+@click.option('--idx_file', help = 'Path and name of index.csv file created by med-imagetools')
+@click.option('--crawl_db_file', help = 'Path and name of crawl_db.json file created by med-imagetools')
+@click.option('--ann_dcm_path', help = 'Path to all annotation dicom files')
+@click.option('--dataset_path', help = 'Path containing images folder for annotations, imaging, and segmentations. Used to get segmentations')
+@click.option('--log_path', help = 'Path for log file to be created')
+@click.option('--out_path', help = 'Destination for outputted files')
+@click.option('--get_intermediate_dfs', default = False, help = 'Determines if you output the annotation-to-image and image-to-segmentation matching files. Default False.')
+def run_matching(idx_file: str,
+                 crawl_db_file: str, 
+                 ann_dcm_path: str, 
+                 dataset_path: str, 
+                 log_path: str, 
+                 out_path: str, 
+                 get_intermediate_dfs: bool
+                 ): 
+    
+    log_path = Path(log_path)
+    idx_file = Path(idx_file)
+    crawl_db_file = Path(crawl_db_file)
+    ann_dcm_path = Path(ann_dcm_path)
+    dataset_path = Path(dataset_path)
+    out_path = Path(out_path)
 
-    idx_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/.imgtools/images/index.csv"
-    dicom_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/.imgtools/images/crawl_db.json"
-    ann_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/images/annotations/NSCLC-Radiogenomics"
-    seg_data_path = dirs.RAWDATA / "/Lung/TCIA_NSCLC-Radiogenomics"
-    out_path = export_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing")
+    logging.basicConfig(filename=log_path / "match_ann_to_seg.log", encoding='utf-8', level=logging.DEBUG)
 
-    index_df = pd.read_csv(idx_path)
+    index_df = pd.read_csv(idx_file)
 
     matched_ann_img_df = match_ann_to_image(index_df) 
-    # matched_ann_img_df.to_csv(out_path / "matching_ann_to_img_CCRCC.csv", index = False)
 
     matched_img_seg_df = match_img_to_seg(index_df, matched_ann_img_df) 
-    # matched_img_seg_df.to_csv(out_path / "matching_img_to_seg_CCRCC.csv", index = False)
 
-    with open(dicom_data_path, 'r') as file: 
+    if get_intermediate_dfs: 
+        matched_ann_img_df.to_csv(out_path / "matching_ann_to_img.csv", index = False)
+        matched_img_seg_df.to_csv(out_path / "matching_img_to_seg.csv", index = False)
+
+    with open(crawl_db_file, 'r') as file: 
         dicom_data_json = file.read()
         dicom_data_dict = json.loads(dicom_data_json)
 
-        matched_ann_seg, no_match_ann_seg = match_ann_to_seg(matched_ann_img_df, matched_img_seg_df, dicom_data_dict, ann_data_path, seg_data_path)
-        matched_ann_seg.to_csv(out_path / "matching_ann_to_seg_NSCLC.csv", index = False)
-        no_match_ann_seg.to_csv(out_path / "no_match_anns_NSCLC.csv", index = False)
+        matched_ann_seg, no_match_ann_seg = match_ann_to_seg(matched_ann_img_df, matched_img_seg_df, dicom_data_dict, ann_dcm_path, dataset_path)
+        matched_ann_seg.to_csv(out_path / "matching_ann_to_seg.csv", index = False)
+        no_match_ann_seg.to_csv(out_path / "no_matching_ann_to_seg.csv", index = False)
 
         file.close()
+    
+if __name__ == '__main__': 
+    logger = logging.getLogger(__name__)
+    run_matching()
