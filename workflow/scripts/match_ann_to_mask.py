@@ -163,7 +163,7 @@ def match_img_to_seg(idx_df: pd.DataFrame,
 
 #This is for if the json file has all necessary information as of now.
 
-def get_longest_ann(ann_dicom_file_path: Path): 
+def get_ann_measurements(ann_dicom_file_path: Path): 
     '''
     Scrapes the raw annotation DICOM file for information relating to long axis measurements. Logs all possible measurements. 
     Assumes all relevant data in the SR follows the same structure and depth and that all measurements correspond to relevant tumours.
@@ -175,41 +175,70 @@ def get_longest_ann(ann_dicom_file_path: Path):
 
     Returns 
     ---------
-    largest_measure: float 
-        The length of the greatest long axis measurement found 
-    measure_type_largest: str 
-        Should always be "Long Axis", but outputted anyway for sanity checking
-    measure_unit_largest: str
-        Should also always be "mm", but outputted anyway for sanity checking
-    ref_SOPUID_largest: str 
-        The slice ID associated with the greatest measurement
+    tum_info_df: pd.DataFrame
+        Contains information related to file and the long and short axis measurements
     '''
-
+    cols = ["AnnSeriesInstanceUID", 
+            "LongAxisMeasureType", 
+            "LongAxisUnit", 
+            "LongAxisMeasurement", 
+            "LongAxisRefSOPUID", 
+            "ShortAxisMeasureType", 
+            "ShortAxisUnit", 
+            "ShortAxisMeasurement", 
+            "ShortAxisRefSOPUID"]
+    
+    tum_info_df = pd.DataFrame(columns = cols)
     dicom_data = pydicom.dcmread(ann_dicom_file_path)
 
+    ann_seriesInstUID = dicom_data.SeriesInstanceUID
     parent_cont_seq = dicom_data.ContentSequence
     
     logger.info("Measurements being obtained for file: %s", ann_dicom_file_path)
 
-    largest_measure = -1
-    ref_SOPUID_largest = ""
     for cont_seq in range(len(parent_cont_seq[4]["ContentSequence"].value)): 
-        measure_type = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
-        measure_unit = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["MeasuredValueSequence"][0]["MeasurementUnitsCodeSequence"][0]["CodeValue"].value
-        measurement = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["MeasuredValueSequence"][0]["NumericValue"].value
-        ref_SOPUID = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
+        measure_type_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
+        measure_unit_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["MeasuredValueSequence"][0]["MeasurementUnitsCodeSequence"][0]["CodeValue"].value
+        measurement_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["MeasuredValueSequence"][0]["NumericValue"].value
+        ref_SOPUID_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
 
-        logger.info("Measurement of type %s and units %s has been obtained.", measure_type, measure_unit)
-        logger.info("Measurement value: %s", measurement)
-        logger.info("Corresponding ReferencedSOPUID: %s", ref_SOPUID)
+        logger.info("Long axis measurement of type %s and units %s has been obtained.", measure_type_long, measure_unit_long)
+        logger.info("Long axis easurement value: %s", measurement_long)
+        logger.info("Long axis corresponding ReferencedSOPUID: %s", ref_SOPUID_long)
 
-        if float(measurement) > largest_measure: 
-            largest_measure = float(measurement)
-            measure_type_largest = measure_type 
-            measure_unit_largest = measure_unit
-            ref_SOPUID_largest = ref_SOPUID
+        measure_type_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
+        measure_unit_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["MeasuredValueSequence"][0]["MeasurementUnitsCodeSequence"][0]["CodeValue"].value
+        measurement_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["MeasuredValueSequence"][0]["NumericValue"].value
+        ref_SOPUID_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
 
-    return largest_measure, measure_type_largest, measure_unit_largest, ref_SOPUID_largest
+        logger.info("Short axis measurement of type %s and units %s has been obtained.", measure_type_short, measure_unit_short)
+        logger.info("Short axis measurement value: %s", measurement_short)
+        logger.info("Short axis corresponding ReferencedSOPUID: %s", ref_SOPUID_short)
+
+        #Check to make sure long and short axis measurements were taken on same slice. 
+        if ref_SOPUID_long != ref_SOPUID_short: 
+            logger.debug("Long and short axis measurements for SeriesInstanceUID %s not taken on the same slice")
+            logger.debug("Long axis RefSOPUID: %s", ref_SOPUID_long)
+            logger.debug("Short axis RefSOPUID: %s", ref_SOPUID_short)
+
+        curr_tum_info = [ann_seriesInstUID, 
+                         measure_type_long, 
+                         measure_unit_long,
+                         measurement_long, 
+                         ref_SOPUID_long, 
+                         measure_type_short,
+                         measure_unit_short,
+                         measurement_short, 
+                         ref_SOPUID_short]
+        
+        curr_tum_df = pd.DataFrame([curr_tum_info], columns = cols)
+        
+        if tum_info_df.empty: 
+            tum_info_df = curr_tum_df
+        else:
+            tum_info_df = pd.concat([tum_info_df, curr_tum_df])
+
+    return tum_info_df
 
 def get_rtstruct_SOPUIDs(rtstruct_dicom_path: Path):
     '''
@@ -267,6 +296,8 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
     ----------
     match_info_summary: pd.DataFrame 
         Contains the SEG or RTSTRUCT, SR, and imaging paired information. 
+    no_match_info_summary: pd.DataFrame
+        Contains the information for annotations that do not have segmentation matches. Segmentation info left blank. 
     '''
     cols = ["PatientID", 
             "StudyInstanceUID", 
@@ -276,19 +307,25 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
             "AnnSeriesInstanceUID", 
             "SegSeriesInstanceUIDs", 
             "AnnReferencedSOPUID", 
-            "AnnLength", 
-            "AnnMeasureType", 
-            "AnnMeasureUnit",
+            "AnnLongAxisLength", 
+            "AnnLongAxisMeasureType", 
+            "AnnLongAxisMeasureUnit",
+            "AnnShortAxisLength", 
+            "AnnShortAxisMeasureType", 
+            "AnnShortAxisMeasureUnit",
             "ImgModality", 
             "AnnModality", 
             "SegModality", 
             "ImgSubSeries", 
             "ImgLocation", 
-            "AnnLocation", 
+            "AnnLocation",
+            "AnnFilename", 
             "SegLocation"       
            ]
     
     match_info_summary = pd.DataFrame(columns = cols) 
+    no_match_info_summary = pd.DataFrame(columns = cols)
+
     for ann_seriesInstUID in match_ann_img_df["AnnSeriesInstanceUID"]:
         img_ann_info = match_ann_img_df[match_ann_img_df["AnnSeriesInstanceUID"] == ann_seriesInstUID]
         ann_series_info = dicom_info_dict[ann_seriesInstUID]
@@ -306,116 +343,154 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
         logger.info("Corresponding annotation file for below measurements: %s", filename) #Assumes only one instance for each SR
         
         ann_file_path = ann_dicom_path / filename
-        recist_measure, measure_type, measure_unit, ann_refSOPUID = get_longest_ann(ann_file_path)
+        tum_measurements = get_ann_measurements(ann_file_path)
         
         ann_refSeriesUID = ann_dicom_info["ReferencedSeriesUID"]
-
-        #Handling duplicate imaging SeriesInstanceUIDs (for ones with multiple SubSeries) 
-        if img_ann_info["ImgSubSeries"].values[0] == "N/A": 
-            logger.info("Finding correct imaging subseries.")
-            img_ser_instUID = img_ann_info["ImgSeriesInstanceUID"].values[0]
-            image_series_info = dicom_info_dict[img_ser_instUID]
-            for subseries in image_series_info: 
-                image_dicom_info = image_series_info[str(subseries)]
-                img_inst = list(image_dicom_info['instances'])
-                if ann_refSOPUID in img_inst: 
-                    img_subseries = subseries
-        else: 
-            img_subseries = img_ann_info["ImgSubSeries"].values[0]
-
-        match_seg_tests = match_img_seg_df[match_img_seg_df["SegReferencedSeriesUID"] == ann_refSeriesUID] 
-
-        potential_seg_matches = list()
-
-        for seg_seriesInstUID in match_seg_tests["SegSeriesInstanceUID"]: 
-            curr_info = match_seg_tests[match_seg_tests["SegSeriesInstanceUID"] == seg_seriesInstUID]
-            seg_series_info = dicom_info_dict[seg_seriesInstUID]
-            seg_dicom_info = seg_series_info["1"] #Assumes the same as SRs above
-
-            if curr_info["SegModality"].values[0] == "SEG": 
-                seg_refSOPUIDs = seg_dicom_info["ReferencedSOPUIDs"]
-                if len(list(seg_dicom_info["instances"])) > 1: 
-                    logger.debug("More than one segmentation found in the segmentation file for Patient ID: %s. Please double check this. Relevant data below:", seg_dicom_info["PatientID"])
-                    logger.debug(seg_refSOPUIDs)
-                    continue
-                
-            elif curr_info["SegModality"].values[0] == "RTSTRUCT": 
-                seg_partial_path = seg_dicom_info["folder"]
-                seg_dicom_file = seg_dicom_path / seg_partial_path / "1.dcm"
-                seg_refSOPUIDs = get_rtstruct_SOPUIDs(seg_dicom_file)
-
+        
+        for refSOPUID in ann_refSOPUIDs: 
+            curr_measurements = tum_measurements[tum_measurements["LongAxisRefSOPUID"] == refSOPUID]
+            if curr_measurements.shape[0] > 1: 
+                logger.debug("Multiple long axis measurements on the same slice") #This should never happen unless there is overlap of segmentations 
+                continue
+            
+            #Handling duplicate imaging SeriesInstanceUIDs (for ones with multiple SubSeries) 
+            if img_ann_info["ImgSubSeries"].values[0] == "N/A": 
+                logger.info("Finding correct imaging subseries.")
+                img_ser_instUID = img_ann_info["ImgSeriesInstanceUID"].values[0]
+                image_series_info = dicom_info_dict[img_ser_instUID]
+                for subseries in image_series_info: 
+                    image_dicom_info = image_series_info[str(subseries)]
+                    img_inst = list(image_dicom_info['instances'])
+                    if refSOPUID in img_inst: 
+                        img_subseries = subseries
             else: 
-                logger.error("Segmentation modality %s is currently not supported. Skipping segmentation", curr_info["SegModality"])
+                img_subseries = img_ann_info["ImgSubSeries"].values[0]
 
-            if ann_refSOPUID in seg_refSOPUIDs: 
-                potential_seg_matches.append(seg_dicom_info["SeriesInstanceUID"])
+            match_seg_tests = match_img_seg_df[match_img_seg_df["SegReferencedSeriesUID"] == ann_refSeriesUID] 
 
-        if len(potential_seg_matches) > 1: 
-            logger.debug("Annotation-segmentation matching indeterminant for annotation SeriesInstanceUID: %s. Annotation within multiple segmentation slices.", ann_refSeriesUID)
-            logger.debug("Potential segmentation matches for %s: %s", ann_refSeriesUID, potential_seg_matches)
-        elif len(potential_seg_matches) < 1: 
-            logger.debug("No segmentation match found for annotation SeriesInstanceUID: %s.", ann_seriesInstUID)
-            logger.debug("Usually related to largest annotation not being within ReferencedSOPUIDs, but smaller ones are. Investigate annotation-image-segmentation triplet.")
-            continue 
+            potential_seg_matches = list()
 
-        potential_seg_locations = list()
-        for seg_match in potential_seg_matches: 
-            curr_seg_info = match_img_seg_df[match_img_seg_df["SegSeriesInstanceUID"] == seg_match]
-            curr_seg = curr_seg_info["SegLocation"].values.tolist()
-            potential_seg_locations.append(curr_seg)
+            for seg_seriesInstUID in match_seg_tests["SegSeriesInstanceUID"]: 
+                curr_info = match_seg_tests[match_seg_tests["SegSeriesInstanceUID"] == seg_seriesInstUID]
+                seg_series_info = dicom_info_dict[seg_seriesInstUID]
+                seg_dicom_info = seg_series_info["1"] #Assumes the same as SRs subseries
 
-        matched_info = [ann_dicom_info["PatientID"], 
-                        ann_dicom_info["StudyInstanceUID"], 
-                        img_ann_info["ImgSeriesInstanceUID"].values[0], 
-                        ann_refSeriesUID,  
-                        seg_dicom_info["ReferencedSeriesUID"], #Assumes that all potential seg matches have the same ref image
-                        ann_dicom_info["SeriesInstanceUID"], 
-                        potential_seg_matches, 
-                        ann_refSOPUID, 
-                        recist_measure,
-                        measure_type, 
-                        measure_unit,
-                        img_ann_info["ImgModality"].values[0], 
-                        ann_dicom_info["Modality"], 
-                        seg_dicom_info["Modality"],
-                        img_subseries, 
-                        img_ann_info["ImgLocation"].values[0], 
-                        img_ann_info["AnnLocation"].values[0],
-                        potential_seg_locations
-                       ]
-    
-        match_info_df = pd.DataFrame([matched_info], columns = cols)
-        match_info_summary = pd.concat([match_info_summary, match_info_df])
-    return match_info_summary
-    
+                if curr_info["SegModality"].values[0] == "SEG": 
+                    seg_refSOPUIDs = seg_dicom_info["ReferencedSOPUIDs"]
+                    if len(list(seg_dicom_info["instances"])) > 1: 
+                        logger.debug("More than one segmentation found in the segmentation file for Patient ID: %s. Please double check this. Relevant data below:", seg_dicom_info["PatientID"])
+                        logger.debug(seg_refSOPUIDs)
+                        continue
+                    
+                elif curr_info["SegModality"].values[0] == "RTSTRUCT": 
+                    seg_partial_path = seg_dicom_info["folder"]
+                    seg_dicom_file = seg_dicom_path / seg_partial_path / "1.dcm" #Assuming all segmentation files are labelled as "1.dcm"
+                    seg_refSOPUIDs = get_rtstruct_SOPUIDs(seg_dicom_file)
+
+                else: 
+                    logger.error("Segmentation modality %s is currently not supported. Skipping segmentation", curr_info["SegModality"])
+
+                if refSOPUID in seg_refSOPUIDs: 
+                    potential_seg_matches.append(seg_dicom_info["SeriesInstanceUID"])
+
+            if len(potential_seg_matches) > 1: 
+                logger.debug("Annotation-segmentation matching indeterminant for annotation SeriesInstanceUID: %s. Annotation within multiple segmentation slices.", ann_refSeriesUID)
+                logger.debug("Potential segmentation matches for %s: %s", ann_refSeriesUID, potential_seg_matches)
+            elif len(potential_seg_matches) < 1: 
+                logger.debug("No segmentation match found for annotation SeriesInstanceUID: %s with ReferencedSOPUID: %s", ann_seriesInstUID, refSOPUID)
+                no_matched_info = [ann_dicom_info["PatientID"], 
+                            ann_dicom_info["StudyInstanceUID"], 
+                            img_ann_info["ImgSeriesInstanceUID"].values[0], 
+                            ann_refSeriesUID,  
+                            seg_dicom_info["ReferencedSeriesUID"], #Assumes that all potential seg matches have the same ref image
+                            ann_dicom_info["SeriesInstanceUID"], 
+                            potential_seg_matches, 
+                            refSOPUID, 
+                            curr_measurements["LongAxisMeasurement"].values[0],
+                            curr_measurements["LongAxisMeasureType"].values[0], 
+                            curr_measurements["LongAxisUnit"].values[0],
+                            curr_measurements["ShortAxisMeasurement"].values[0], 
+                            curr_measurements["ShortAxisMeasureType"].values[0], 
+                            curr_measurements["ShortAxisUnit"].values[0],
+                            img_ann_info["ImgModality"].values[0], 
+                            ann_dicom_info["Modality"], 
+                            seg_dicom_info["Modality"],
+                            img_subseries, 
+                            img_ann_info["ImgLocation"].values[0], 
+                            img_ann_info["AnnLocation"].values[0],
+                            filename,
+                            None]
+                
+                no_match_df = pd.DataFrame([no_matched_info], columns = cols)
+                if no_match_info_summary.empty: 
+                    no_match_info_summary = no_match_df
+                else: 
+                    no_match_info_summary = pd.concat([no_match_info_summary, no_match_df])
+                continue 
+
+            potential_seg_locations = list()
+            for seg_match in potential_seg_matches: 
+                curr_seg_info = match_img_seg_df[match_img_seg_df["SegSeriesInstanceUID"] == seg_match]
+                curr_seg = curr_seg_info["SegLocation"].values.tolist()
+                potential_seg_locations.append(curr_seg)
+
+            matched_info = [ann_dicom_info["PatientID"], 
+                            ann_dicom_info["StudyInstanceUID"], 
+                            img_ann_info["ImgSeriesInstanceUID"].values[0], 
+                            ann_refSeriesUID,  
+                            seg_dicom_info["ReferencedSeriesUID"], #Assumes that all potential seg matches have the same ref image
+                            ann_dicom_info["SeriesInstanceUID"], 
+                            potential_seg_matches, 
+                            refSOPUID, 
+                            curr_measurements["LongAxisMeasurement"].values[0],
+                            curr_measurements["LongAxisMeasureType"].values[0], 
+                            curr_measurements["LongAxisUnit"].values[0],
+                            curr_measurements["ShortAxisMeasurement"].values[0], 
+                            curr_measurements["ShortAxisMeasureType"].values[0], 
+                            curr_measurements["ShortAxisUnit"].values[0],
+                            img_ann_info["ImgModality"].values[0], 
+                            ann_dicom_info["Modality"], 
+                            seg_dicom_info["Modality"],
+                            img_subseries, 
+                            img_ann_info["ImgLocation"].values[0], 
+                            img_ann_info["AnnLocation"].values[0],
+                            filename,
+                            potential_seg_locations
+                        ]
+        
+            match_info_df = pd.DataFrame([matched_info], columns = cols)
+
+            if match_info_summary.empty:
+                match_info_summary = match_info_df
+            else:
+                match_info_summary = pd.concat([match_info_summary, match_info_df])
+
+    return match_info_summary, no_match_info_summary
 
 if __name__ == '__main__': 
     logger = logging.getLogger(__name__)
-    logging.basicConfig(filename='logs/match_ann_img_seg_CCRCC.log', encoding='utf-8', level=logging.DEBUG)
+    logging.basicConfig(filename='/home/bhkuser/bhklab/kaitlyn/aaura_paper0/logs/match_no_match_ann_img_seg_NSCLC.log', encoding='utf-8', level=logging.DEBUG)
 
-    idx_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/.imgtools/images/index.csv"
-    dicom_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/.imgtools/images/crawl_db.json"
-    ann_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/images/annotations/CPTAC-CCRCC"
-    seg_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/"
-    out_path = export_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/scripts")
+    idx_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/.imgtools/images/index.csv"
+    dicom_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/.imgtools/images/crawl_db.json"
+    ann_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/images/annotations/NSCLC-Radiogenomics"
+    seg_data_path = dirs.RAWDATA / "/Lung/TCIA_NSCLC-Radiogenomics"
+    out_path = export_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing")
 
     index_df = pd.read_csv(idx_path)
 
     matched_ann_img_df = match_ann_to_image(index_df) 
-    matched_ann_img_df.to_csv(out_path / "matching_ann_to_img_CCRCC.csv", index = False)
+    # matched_ann_img_df.to_csv(out_path / "matching_ann_to_img_CCRCC.csv", index = False)
 
     matched_img_seg_df = match_img_to_seg(index_df, matched_ann_img_df) 
-    matched_img_seg_df.to_csv(out_path / "matching_img_to_seg_CCRCC.csv", index = False)
+    # matched_img_seg_df.to_csv(out_path / "matching_img_to_seg_CCRCC.csv", index = False)
 
     with open(dicom_data_path, 'r') as file: 
         dicom_data_json = file.read()
         dicom_data_dict = json.loads(dicom_data_json)
 
-        matched_ann_seg = match_ann_to_seg(matched_ann_img_df, matched_img_seg_df, dicom_data_dict, ann_data_path, seg_data_path)
-        matched_ann_seg.to_csv(out_path / "matching_ann_to_seg_CCRCC.csv", index = False)
+        matched_ann_seg, no_match_ann_seg = match_ann_to_seg(matched_ann_img_df, matched_img_seg_df, dicom_data_dict, ann_data_path, seg_data_path)
+        matched_ann_seg.to_csv(out_path / "matching_ann_to_seg_NSCLC.csv", index = False)
+        no_match_ann_seg.to_csv(out_path / "no_match_anns_NSCLC.csv", index = False)
 
         file.close()
-
-
-
-
