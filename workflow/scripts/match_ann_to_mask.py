@@ -3,6 +3,10 @@ import json
 import logging
 import pydicom
 import click
+import sympy.geometry as gm
+import SimpleITK as sitk
+import numpy as np
+import matplotlib.pyplot as plt
 
 from damply import dirs
 from pathlib import Path
@@ -164,6 +168,44 @@ def match_img_to_seg(idx_df: pd.DataFrame,
 
 #This is for if the json file has all necessary information as of now.
 
+def get_axes_intersection(tum_info_df: pd.DataFrame): 
+    '''
+    Calculates the intersection point between the long axis and short axis tumour measurements. Used to confirm annotation-segmentation matching. 
+    Warning: Edge case with concave polygonal tumours not necessarily covered by this check. 
+
+    Parameters
+    ----------
+    tum_info_df: pd.DataFrame 
+        Contains the long and short axis measurements, coordinates, and associated annotation information
+    Returns
+    ----------
+    tum_info_and_intersect_df: pd.DataFrame
+        The same tum_info_df but with an added column named "AnnLongShortIntersection" containing an array representing the interesection point [x,y] 
+    '''
+
+    axis_intersects = []
+    for idx, row in tum_info_df.iterrows(): 
+        long_ax_coords = row["LongAxisCoords"]
+        short_ax_coords = row["ShortAxisCoords"] 
+        
+        long_x1y1 = gm.Point(long_ax_coords[0], long_ax_coords[1])
+        long_x2y2 = gm.Point(long_ax_coords[2], long_ax_coords[3])
+        short_x1y1 = gm.Point(short_ax_coords[0], short_ax_coords[1])
+        short_x2y2 = gm.Point(short_ax_coords[2], short_ax_coords[3])
+
+        long_axis = gm.Line(long_x1y1, long_x2y2)
+        short_axis = gm.Line(short_x1y1, short_x2y2)
+
+        intersection = (long_axis.intersection(short_axis))[0].evalf()
+        intersect_array = [intersection[0], intersection[1]]
+        
+        axis_intersects.append(intersect_array)
+    
+    tum_info_df["AnnLongShortIntersection"] = axis_intersects
+    tum_info_and_intersect_df = tum_info_df
+
+    return tum_info_and_intersect_df
+
 def get_ann_measurements(ann_dicom_file_path: Path): 
     '''
     Scrapes the raw annotation DICOM file for information relating to long axis measurements. Logs all possible measurements. 
@@ -176,24 +218,30 @@ def get_ann_measurements(ann_dicom_file_path: Path):
 
     Returns 
     ---------
-    tum_info_df: pd.DataFrame
+    all_tum_info_df: pd.DataFrame
         Contains information related to file and the long and short axis measurements
     '''
-    cols = ["AnnSeriesInstanceUID", 
+    cols = ["AnnPatientID",
+            "AnnSeriesInstanceUID", 
+            "AnnReferencedSeriesUID",
             "LongAxisMeasureType", 
             "LongAxisUnit", 
             "LongAxisMeasurement", 
             "LongAxisRefSOPUID", 
+            "LongAxisCoords",
             "ShortAxisMeasureType", 
             "ShortAxisUnit", 
             "ShortAxisMeasurement", 
-            "ShortAxisRefSOPUID"]
+            "ShortAxisRefSOPUID",
+            "ShortAxisCoords"]
     
     tum_info_df = pd.DataFrame(columns = cols)
     dicom_data = pydicom.dcmread(ann_dicom_file_path)
 
     ann_seriesInstUID = dicom_data.SeriesInstanceUID
+    ann_patientID = dicom_data.PatientID
     parent_cont_seq = dicom_data.ContentSequence
+    ann_refSeriesInstUID = dicom_data.CurrentRequestedProcedureEvidenceSequence[0]["ReferencedSeriesSequence"][0]["SeriesInstanceUID"].value
     
     logger.info("Measurements being obtained for file: %s", ann_dicom_file_path)
 
@@ -202,19 +250,29 @@ def get_ann_measurements(ann_dicom_file_path: Path):
         measure_unit_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["MeasuredValueSequence"][0]["MeasurementUnitsCodeSequence"][0]["CodeValue"].value
         measurement_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["MeasuredValueSequence"][0]["NumericValue"].value
         ref_SOPUID_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
+        long_axis_points = []
+        for point_long in range(4): #For (x1, y1) (x2, y2) coordinates to make the long axis
+            point = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["ContentSequence"][0]["GraphicData"][point_long]
+            long_axis_points.append(point)
 
         logger.info("Long axis measurement of type %s and units %s has been obtained.", measure_type_long, measure_unit_long)
         logger.info("Long axis easurement value: %s", measurement_long)
         logger.info("Long axis corresponding ReferencedSOPUID: %s", ref_SOPUID_long)
+        logger.info("Long axis coordinates: %s", long_axis_points)
 
         measure_type_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
         measure_unit_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["MeasuredValueSequence"][0]["MeasurementUnitsCodeSequence"][0]["CodeValue"].value
         measurement_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["MeasuredValueSequence"][0]["NumericValue"].value
         ref_SOPUID_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
-
+        short_axis_points = []
+        for point_short in range(4): #Same as above but for the short axis instead
+            point = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["ContentSequence"][0]["GraphicData"][point_short]
+            short_axis_points.append(point)
+        
         logger.info("Short axis measurement of type %s and units %s has been obtained.", measure_type_short, measure_unit_short)
         logger.info("Short axis measurement value: %s", measurement_short)
         logger.info("Short axis corresponding ReferencedSOPUID: %s", ref_SOPUID_short)
+        logger.info("Short axis coordinates: %s ", short_axis_points)
 
         #Check to make sure long and short axis measurements were taken on same slice. 
         if ref_SOPUID_long != ref_SOPUID_short: 
@@ -222,15 +280,19 @@ def get_ann_measurements(ann_dicom_file_path: Path):
             logger.debug("Long axis RefSOPUID: %s", ref_SOPUID_long)
             logger.debug("Short axis RefSOPUID: %s", ref_SOPUID_short)
 
-        curr_tum_info = [ann_seriesInstUID, 
+        curr_tum_info = [ann_patientID,
+                         ann_seriesInstUID, 
+                         ann_refSeriesInstUID,
                          measure_type_long, 
                          measure_unit_long,
                          measurement_long, 
                          ref_SOPUID_long, 
+                         long_axis_points,
                          measure_type_short,
                          measure_unit_short,
                          measurement_short, 
-                         ref_SOPUID_short]
+                         ref_SOPUID_short, 
+                         short_axis_points]
         
         curr_tum_df = pd.DataFrame([curr_tum_info], columns = cols)
         
@@ -239,7 +301,9 @@ def get_ann_measurements(ann_dicom_file_path: Path):
         else:
             tum_info_df = pd.concat([tum_info_df, curr_tum_df])
 
-    return tum_info_df
+    all_tum_info_df = get_axes_intersection(tum_info_df)
+
+    return all_tum_info_df
 
 def get_rtstruct_SOPUIDs(rtstruct_dicom_path: Path):
     '''
@@ -269,16 +333,189 @@ def get_rtstruct_SOPUIDs(rtstruct_dicom_path: Path):
 
     return rtstruct_SOPUIDs
 
+def get_nifti_locs(nifti_idx_path: Path, 
+                   img_seg_info: pd.DataFrame): 
+    '''
+    Gets the file locations of the nifti files for CT image and associated segmentation. 
+    
+    Parameters
+    ----------
+    nifti_idx_path: Path
+        Path to index file created by med-imagetools for the nifti versions of the CT and segmentation files  
+    img_seg_info: pd.DataFrame 
+        A one-row dataframe containing the current image and segmentation information
+
+    Returns 
+    ----------
+    img_nifti_path: Path 
+        Path to the CT imaging nifti file 
+    seg_nifti_path: Path 
+        Path to the associated segmentation nifti file 
+    '''
+
+    nifti_path = Path("/".join(str(nifti_idx_path).split("/")[:-1]))
+    nifti_idx_df = pd.read_csv(nifti_idx_path)
+
+    img_instUID = img_seg_info["ImgSeriesInstanceUID"].values[0]
+    seg_instUID = img_seg_info["SegSeriesInstanceUID"].values[0]
+
+    img_nifti = nifti_idx_df[nifti_idx_df["SeriesInstanceUID"] == img_instUID]["filepath"]
+    seg_nifti = nifti_idx_df[nifti_idx_df["SeriesInstanceUID"] == seg_instUID]["filepath"]
+
+    img_nifti_path = nifti_path / img_nifti.values[0]
+    seg_niftis = nifti_path / seg_nifti
+
+    for row in seg_niftis.items(): 
+        path = str(row[1])
+        if "GTV" in path: 
+            seg_nifti_path = Path(path)
+    
+    return img_nifti_path, seg_nifti_path 
+
+def get_slice_num(inst_slice: str, 
+                  num_of_slices: int): 
+    '''
+    Gets the slice number of based on an instances value from a given referencedSOPUID and then matches it to the order of the nifti slices.
+
+    Parameters
+    ----------
+    inst_slice: str
+        Reference of the dicom slice file
+    num_of_slices: int 
+        Number of slices that are in the whole image
+    Returns 
+    ----------
+    slice_num 
+        The slice number aligned with the nifti slices
+    '''
+
+    subseries_slice = inst_slice.split(".")[0]
+    dicom_slice = int(subseries_slice.split("-")[-1])
+
+    slice_num = num_of_slices - dicom_slice + 1 #subtracting since the nifti's slices are referenced backwards from the dicom slices and adding one because nifti slices start at index 0
+    
+    return slice_num 
+
+def plot_img_seg_ann(tum_info: pd.Series,
+                     img_slice: np.array,
+                     seg_slice: np.array, 
+                     save_path: Path): 
+    '''
+    Plots the annotation measured axes and the intersection point on the corresponding segmentation overlaying the image slice. 
+
+    Parameters
+    ----------
+    tum_info: pd.Series
+        Contains all information relevant to the current annotation 
+    img_slice: np.array
+        Imaging slice information 
+    seg_slice: np.array 
+        Segmentation slice information 
+    save_path: Path 
+        Where to save the plot once finished
+    '''
+    
+    plt.imshow(img_slice, cmap="Greys_r")
+    plt.imshow(seg_slice, alpha = 0.7, cmap ="Accent")
+    plt.plot([tum_info["LongAxisCoords"][0], tum_info["LongAxisCoords"][2]], 
+               [tum_info["LongAxisCoords"][1], tum_info["LongAxisCoords"][3]], 
+               'ro-', markersize = 2, linewidth = 1)
+    plt.plot([tum_info["ShortAxisCoords"][0], tum_info["ShortAxisCoords"][2]], 
+             [tum_info["ShortAxisCoords"][1], tum_info["ShortAxisCoords"][3]], 
+             'bo-', markersize = 2, linewidth = 1)
+    plt.plot(tum_info["AnnLongShortIntersection"][0], tum_info["AnnLongShortIntersection"][1], 
+             'yo', markersize = 2)
+    plt.text(2, -5, "RefSOPUID: " + tum_info["LongAxisRefSOPUID"], fontsize=6)
+
+    patient_ann = 0
+    save_name = tum_info["AnnPatientID"] + "_" + str(patient_ann) + ".png"
+    out_path = save_path / save_name 
+    while out_path.exists(): 
+        patient_ann +=1
+        save_name = tum_info["AnnPatientID"] + "_" + str(patient_ann) + ".png"
+        out_path = save_path / save_name 
+
+    plt.savefig(out_path)
+
+    plt.close()
+
+def confirm_ann_seg_match(tum_info_df: pd.DataFrame, 
+                          img_nifti_path: Path,
+                          seg_nifti_path: Path,
+                          dicom_data_dict: dict,
+                          image_subseries: str,
+                          overlay_out_path: Path): 
+    '''
+    Checks whether an intersection point is within the segmentation of a specific file. Overlays image, annotation, and segmentation for 
+    visual confirmation as well. 
+
+    Parameters
+    ----------
+    tum_info_df: pd.DataFrame
+        Contains the long and short axis and intersection information
+    img_nifti_path: Path 
+        Path to the associated imaging nifti file 
+    seg_nifti_path: Path
+        Path to the associated segmentation nifti file
+    dicom_data_dict: dict
+        Contains all information related to the crawl_db.json file
+    image_subseries: str
+        CT subseries number that will help access the correct DICOM information
+    overlay_out_path: Path 
+        Path to where the overlayed image will be saved
+
+    Returns
+    ---------
+    is_in_seg: bool 
+        Returns 0 if intersection is not in the segmentation and 1 if it is
+    '''
+
+    img_nifti = sitk.ReadImage(img_nifti_path)
+    seg_nifti = sitk.ReadImage(seg_nifti_path)
+
+    img_arr = sitk.GetArrayFromImage(img_nifti)
+    seg_arr = sitk.GetArrayFromImage(seg_nifti)
+    np_seg_arr = np.ma.masked_where(seg_arr == 0, seg_arr) 
+
+    img_slice_num = img_arr.shape[0]
+    np_seg_slice_num = np_seg_arr.shape[0]
+
+    if img_slice_num != np_seg_slice_num: 
+        logger.debug("Image and segmentation have different number of slices. See below for relevant information: ")
+        logger.debug("Nifti image path: %s", img_nifti_path)
+        logger.debug("Nifti segmentation path: %s", seg_nifti_path)
+
+        return 0 
+
+    for idx, row in tum_info_df.iterrows(): 
+        img_seriesInstUID = row["AnnReferencedSeriesUID"] 
+        number_of_slices = img_slice_num
+        img_slice_dicom = dicom_data_dict[img_seriesInstUID][image_subseries]["instances"][row["LongAxisRefSOPUID"]]
+        
+        slice_num = get_slice_num(img_slice_dicom, number_of_slices)
+
+        img_slice = img_arr[slice_num]
+        seg_slice = seg_arr[slice_num]
+        np_seg_slice = np_seg_arr[slice_num]
+
+        is_in_seg = seg_slice[round(row["AnnLongShortIntersection"][1])][round(row["AnnLongShortIntersection"][0])]
+
+        if is_in_seg: 
+            plot_img_seg_ann(row, img_slice, np_seg_slice, overlay_out_path)
+
+    return is_in_seg
+
 def match_ann_to_seg(match_ann_img_df: pd.DataFrame, 
                      match_img_seg_df: pd.DataFrame, 
                      dicom_info_dict: dict, 
+                     nifti_idx_path: Path,
                      ann_dicom_path: Path, 
-                     seg_dicom_path: Path):
+                     seg_dicom_path: Path,
+                     img_out_path: Path):
     '''
     Using the information from the previous two functions above, find which segmentation the annotation belongs to
-    via checking if the annotation slice is referenced in the segmentation list of slices. 
-    Also logs if the segmentation slices overlap with other segmentations and if annotations can belong in more than
-    one segmentation. 
+    via checking if the annotation slice is referenced in the segmentation list of slices and confirming whether the long and short axis 
+    intersection is within the segmentation given. Also outputs visualization of the image, segmentation, and intersection. 
 
     Parameters 
     ----------
@@ -288,10 +525,14 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
         Each imaging-segmentation pair of matched information is represented in each row
     dicom_info_dict: dict 
         Contains the DICOM information found in the med-imagetools generated crawl_db.json file. 
+    nifti_idx_path: Path
+        Path to index file created by med-imagetools for the nifti versions of the CT and segmentation files
     ann_dicom_path: Path 
         Path to folder holding all raw annotation DICOM data
     seg_dicom_path: Path 
         Path to folder holding all raw SEG/RTSTRUCT DICOM data
+    img_out_path: Path
+        Path to folder where the overlay image-segmentation-annotation images will go
 
     Returns
     ----------
@@ -311,9 +552,12 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
             "AnnLongAxisLength", 
             "AnnLongAxisMeasureType", 
             "AnnLongAxisMeasureUnit",
+            "AnnLongAxisCoordinates", 
             "AnnShortAxisLength", 
             "AnnShortAxisMeasureType", 
             "AnnShortAxisMeasureUnit",
+            "AnnShortAxisCoordinates", 
+            "AnnLongShortIntersection", 
             "ImgModality", 
             "AnnModality", 
             "SegModality", 
@@ -351,8 +595,7 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
         for refSOPUID in ann_refSOPUIDs: 
             curr_measurements = tum_measurements[tum_measurements["LongAxisRefSOPUID"] == refSOPUID]
             if curr_measurements.shape[0] > 1: 
-                logger.debug("Multiple long axis measurements on the same slice") #This should never happen unless there is overlap of segmentations 
-                continue
+                logger.debug("Multiple long axis measurements on the same slice")
             
             #Handling duplicate imaging SeriesInstanceUIDs (for ones with multiple SubSeries) 
             if img_ann_info["ImgSubSeries"].values[0] == "N/A": 
@@ -363,9 +606,9 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                     image_dicom_info = image_series_info[str(subseries)]
                     img_inst = list(image_dicom_info['instances'])
                     if refSOPUID in img_inst: 
-                        img_subseries = subseries
+                        img_subseries = str(subseries)
             else: 
-                img_subseries = img_ann_info["ImgSubSeries"].values[0]
+                img_subseries = str(img_ann_info["ImgSubSeries"].values[0])
 
             match_seg_tests = match_img_seg_df[match_img_seg_df["SegReferencedSeriesUID"] == ann_refSeriesUID] 
 
@@ -410,9 +653,12 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                             curr_measurements["LongAxisMeasurement"].values[0],
                             curr_measurements["LongAxisMeasureType"].values[0], 
                             curr_measurements["LongAxisUnit"].values[0],
+                            curr_measurements["LongAxisCoords"].values[0],
                             curr_measurements["ShortAxisMeasurement"].values[0], 
                             curr_measurements["ShortAxisMeasureType"].values[0], 
                             curr_measurements["ShortAxisUnit"].values[0],
+                            curr_measurements["ShortAxisCoords"].values[0],
+                            curr_measurements["AnnLongShortIntersection"].values[0],
                             img_ann_info["ImgModality"].values[0], 
                             ann_dicom_info["Modality"], 
                             seg_dicom_info["Modality"],
@@ -429,91 +675,179 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                     no_match_info_summary = pd.concat([no_match_info_summary, no_match_df])
                 continue 
 
-            potential_seg_locations = list()
             for seg_match in potential_seg_matches: 
                 curr_seg_info = match_img_seg_df[match_img_seg_df["SegSeriesInstanceUID"] == seg_match]
-                curr_seg = curr_seg_info["SegLocation"].values.tolist()
-                potential_seg_locations.append(curr_seg)
 
-            matched_info = [ann_dicom_info["PatientID"], 
-                            ann_dicom_info["StudyInstanceUID"], 
-                            img_ann_info["ImgSeriesInstanceUID"].values[0], 
-                            ann_refSeriesUID,  
-                            seg_dicom_info["ReferencedSeriesUID"], #Assumes that all potential seg matches have the same ref image
-                            ann_dicom_info["SeriesInstanceUID"], 
-                            potential_seg_matches, 
-                            refSOPUID, 
-                            curr_measurements["LongAxisMeasurement"].values[0],
-                            curr_measurements["LongAxisMeasureType"].values[0], 
-                            curr_measurements["LongAxisUnit"].values[0],
-                            curr_measurements["ShortAxisMeasurement"].values[0], 
-                            curr_measurements["ShortAxisMeasureType"].values[0], 
-                            curr_measurements["ShortAxisUnit"].values[0],
-                            img_ann_info["ImgModality"].values[0], 
-                            ann_dicom_info["Modality"], 
-                            seg_dicom_info["Modality"],
-                            img_subseries, 
-                            img_ann_info["ImgLocation"].values[0], 
-                            img_ann_info["AnnLocation"].values[0],
-                            filename,
-                            potential_seg_locations
-                        ]
-        
-            match_info_df = pd.DataFrame([matched_info], columns = cols)
+                img_loc, seg_loc = get_nifti_locs(nifti_idx_path, curr_seg_info)
+                for idx, measurement in curr_measurements.iterrows():
+                    measurement_df = pd.DataFrame(measurement).transpose()
+                    is_in_seg = confirm_ann_seg_match(measurement_df, img_loc, seg_loc, dicom_info_dict, img_subseries, img_out_path)
+                    if is_in_seg: 
+                        matched_info = [ann_dicom_info["PatientID"], 
+                                        ann_dicom_info["StudyInstanceUID"], 
+                                        img_ann_info["ImgSeriesInstanceUID"].values[0], 
+                                        ann_refSeriesUID,  
+                                        seg_dicom_info["ReferencedSeriesUID"], #Assumes that all potential seg matches have the same ref image
+                                        ann_dicom_info["SeriesInstanceUID"], 
+                                        seg_match,
+                                        refSOPUID, 
+                                        measurement_df["LongAxisMeasurement"].values[0],
+                                        measurement_df["LongAxisMeasureType"].values[0], 
+                                        measurement_df["LongAxisUnit"].values[0],
+                                        measurement_df["LongAxisCoords"].values[0],
+                                        measurement_df["ShortAxisMeasurement"].values[0], 
+                                        measurement_df["ShortAxisMeasureType"].values[0], 
+                                        measurement_df["ShortAxisUnit"].values[0],
+                                        measurement_df["ShortAxisCoords"].values[0], 
+                                        measurement_df["AnnLongShortIntersection"].values[0],
+                                        img_ann_info["ImgModality"].values[0], 
+                                        ann_dicom_info["Modality"], 
+                                        seg_dicom_info["Modality"],
+                                        img_subseries, 
+                                        img_ann_info["ImgLocation"].values[0], 
+                                        img_ann_info["AnnLocation"].values[0],
+                                        filename,
+                                        curr_seg_info["SegLocation"].values[0]
+                                    ]
+            
+                        match_info_df = pd.DataFrame([matched_info], columns = cols)
+                        if match_info_summary.empty:
+                            match_info_summary = match_info_df
+                        else:
+                            match_info_summary = pd.concat([match_info_summary, match_info_df])
 
-            if match_info_summary.empty:
-                match_info_summary = match_info_df
-            else:
-                match_info_summary = pd.concat([match_info_summary, match_info_df])
+                    else: 
+                        no_matched_info = [ann_dicom_info["PatientID"], 
+                                ann_dicom_info["StudyInstanceUID"], 
+                                img_ann_info["ImgSeriesInstanceUID"].values[0], 
+                                ann_refSeriesUID,  
+                                seg_dicom_info["ReferencedSeriesUID"], #Assumes that all potential seg matches have the same ref image
+                                ann_dicom_info["SeriesInstanceUID"], 
+                                potential_seg_matches, 
+                                refSOPUID, 
+                                measurement_df["LongAxisMeasurement"].values[0],
+                                measurement_df["LongAxisMeasureType"].values[0], 
+                                measurement_df["LongAxisUnit"].values[0],
+                                measurement_df["LongAxisCoords"].values[0],
+                                measurement_df["ShortAxisMeasurement"].values[0], 
+                                measurement_df["ShortAxisMeasureType"].values[0], 
+                                measurement_df["ShortAxisUnit"].values[0],
+                                measurement_df["ShortAxisCoords"].values[0], 
+                                measurement_df["AnnLongShortIntersection"].values[0],
+                                img_ann_info["ImgModality"].values[0], 
+                                ann_dicom_info["Modality"], 
+                                seg_dicom_info["Modality"],
+                                img_subseries, 
+                                img_ann_info["ImgLocation"].values[0], 
+                                img_ann_info["AnnLocation"].values[0],
+                                filename,
+                                None]
+                    
+                        no_match_df = pd.DataFrame([no_matched_info], columns = cols)
+
+                        if no_match_info_summary.empty: 
+                            no_match_info_summary = no_match_df
+                        else: 
+                            no_match_info_summary = pd.concat([no_match_info_summary, no_match_df])
 
     return match_info_summary, no_match_info_summary
 
 @click.command()
-@click.option('--idx_file', help = 'Path and name of index.csv file created by med-imagetools')
+@click.option('--idx_dicom_file', help = 'Path and name of DICOM index.csv file created by med-imagetools')
+@click.option('--idx_nifti_file', help = 'Path and name of mit_DATASET_index.csv file creaded by med-imagetools')
 @click.option('--crawl_db_file', help = 'Path and name of crawl_db.json file created by med-imagetools')
 @click.option('--ann_dcm_path', help = 'Path to all annotation dicom files')
 @click.option('--dataset_path', help = 'Path containing images folder for annotations, imaging, and segmentations. Used to get segmentations')
 @click.option('--log_path', help = 'Path for log file to be created')
-@click.option('--out_path', help = 'Destination for outputted files')
+@click.option('--df_out_path', help = 'Destination for outputted csv files')
+@click.option('--plot_out_path', help = 'Destination for outputted annotation-image-segmentation overlay plots')
 @click.option('--get_intermediate_dfs', default = False, help = 'Determines if you output the annotation-to-image and image-to-segmentation matching files. Default False.')
-def run_matching(idx_file: str,
+def run_matching(idx_dicom_file: str,
+                 idx_nifti_file: str,
                  crawl_db_file: str, 
                  ann_dcm_path: str, 
                  dataset_path: str, 
                  log_path: str, 
-                 out_path: str, 
+                 df_out_path: str, 
+                 plot_out_path: str, 
                  get_intermediate_dfs: bool
                  ): 
     
     log_path = Path(log_path)
-    idx_file = Path(idx_file)
+    idx_dicom_file = Path(idx_dicom_file)
+    idx_nifti_file = Path(idx_nifti_file)
     crawl_db_file = Path(crawl_db_file)
     ann_dcm_path = Path(ann_dcm_path)
     dataset_path = Path(dataset_path)
-    out_path = Path(out_path)
+    df_out_path = Path(df_out_path)
+    plot_out_path = Path(plot_out_path)
 
     logging.basicConfig(filename=log_path / "match_ann_to_seg.log", encoding='utf-8', level=logging.DEBUG)
 
-    index_df = pd.read_csv(idx_file)
+    index_df = pd.read_csv(idx_dicom_file)
 
     matched_ann_img_df = match_ann_to_image(index_df) 
 
     matched_img_seg_df = match_img_to_seg(index_df, matched_ann_img_df) 
 
     if get_intermediate_dfs: 
-        matched_ann_img_df.to_csv(out_path / "matching_ann_to_img.csv", index = False)
-        matched_img_seg_df.to_csv(out_path / "matching_img_to_seg.csv", index = False)
+        matched_ann_img_df.to_csv(df_out_path / "matching_ann_to_img.csv", index = False)
+        matched_img_seg_df.to_csv(df_out_path / "matching_img_to_seg.csv", index = False)
 
     with open(crawl_db_file, 'r') as file: 
         dicom_data_json = file.read()
         dicom_data_dict = json.loads(dicom_data_json)
 
-        matched_ann_seg, no_match_ann_seg = match_ann_to_seg(matched_ann_img_df, matched_img_seg_df, dicom_data_dict, ann_dcm_path, dataset_path)
-        matched_ann_seg.to_csv(out_path / "matching_ann_to_seg.csv", index = False)
-        no_match_ann_seg.to_csv(out_path / "no_matching_ann_to_seg.csv", index = False)
+        # matched_ann_seg, no_match_ann_seg = match_ann_to_seg(matched_ann_img_df, matched_img_seg_df, dicom_data_dict, ann_dcm_path, dataset_path)
+        matched_ann_seg, no_match_ann_seg = match_ann_to_seg(match_ann_img_df = matched_ann_img_df, 
+                                                             match_img_seg_df = matched_img_seg_df, 
+                                                             dicom_info_dict = dicom_data_dict, 
+                                                             nifti_idx_path = idx_nifti_file, 
+                                                             ann_dicom_path = ann_dcm_path, 
+                                                             seg_dicom_path = dataset_path, 
+                                                             img_out_path = plot_out_path)
+        matched_ann_seg.to_csv(df_out_path / "matching_ann_to_seg.csv", index = False)
+        no_match_ann_seg.to_csv(df_out_path / "no_matching_ann_to_seg.csv", index = False)
 
         file.close()
     
 if __name__ == '__main__': 
     logger = logging.getLogger(__name__)
-    run_matching()
+    logging.basicConfig(filename='/home/bhkuser/bhklab/kaitlyn/aaura_paper0/logs/match_no_match_ann_img_seg_NSCLC.log', encoding='utf-8', level=logging.DEBUG)
+    
+    idx_dicom_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-PDA/.imgtools/images/index.csv"
+    idx_nifti_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-PDA/images/mit_CPTAC-PDA/mit_CPTAC-PDA_index.csv"
+    dicom_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-PDA/.imgtools/images/crawl_db.json"
+    ann_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-PDA/images/annotations/CPTAC-PDA"
+    seg_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-PDA/"
+    out_path = Path("/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/data/procdata/Abdomen/TCIA_CPTAC-CCRCC/metadata/annotation_seg_matching")
+    img_out_path = Path("/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/data/results/TCIA_CPTAC-PDA/visualization/annotation_seg_matching")
+
+    if not out_path.exists():
+        Path(out_path).mkdir(parents=True, exist_ok = True)
+
+    if not img_out_path.exists(): 
+        Path(img_out_path).mkdir(parents=True, exist_ok = True)
+    index_dicom_df = pd.read_csv(idx_dicom_path)
+    
+    matched_ann_img_df = match_ann_to_image(index_dicom_df) 
+    matched_img_seg_df = match_img_to_seg(index_dicom_df, matched_ann_img_df)
+
+
+    with open(dicom_data_path, 'r') as file: 
+        dicom_data_json = file.read()
+        dicom_data_dict = json.loads(dicom_data_json)
+
+        matched_ann_seg, no_match_ann_seg = match_ann_to_seg(match_ann_img_df = matched_ann_img_df, 
+                                                             match_img_seg_df = matched_img_seg_df, 
+                                                             dicom_info_dict = dicom_data_dict, 
+                                                             nifti_idx_path = idx_nifti_path, 
+                                                             ann_dicom_path = ann_data_path, 
+                                                             seg_dicom_path = seg_data_path, 
+                                                             img_out_path = img_out_path)
+        matched_ann_seg.to_csv(out_path / "matching_ann_to_seg.csv", index = False)
+        no_match_ann_seg.to_csv(out_path / "no_match_ann_to_seg.csv", index = False)
+
+        file.close()
+    
+    #run_matching()
