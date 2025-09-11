@@ -39,7 +39,7 @@ scipy = ">=1.16.1,<2"
 
 [pypi-dependencies]
 damply = ">=0.10.0, <0.11"
-med-imagetools = ">=2.6.0, <3"
+med-imagetools = ">=2.12.0, <3"
 readii = ">=1.36.2, <2"
 
 [tasks]
