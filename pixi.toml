@@ -48,6 +48,10 @@ example_script = {cmd="python $SCRIPTS/example_script.py"}
 args = ["config"]
 cmd = "snakemake -c 7 --configfile {{ config }}"
 
+[tasks.srscrape]
+args = ["dataset", { "arg" = "overwrite", "default" = "False" }]
+cmd = "python workflow/scripts/sr_testing.py --dataset {{ dataset }} --overwrite {{ overwrite }}"
+
 ############################################## QUALITY ###############################################
 # Quality includes linting, type checking, and formatting
 [feature.quality.dependencies]

@@ -1,0 +1,10 @@
+DATA_SOURCE: "TCIA"
+DATASET_NAME: "CPTAC-CCRCC"
+
+### MED-IMAGETOOLS settings
+MIT:
+    MODALITIES: 
+        image: MR
+        mask: RTSTRUCT
+    ROI_STRATEGY: SEPARATE
+    ROI_MATCH_MAP: GTV:.*
