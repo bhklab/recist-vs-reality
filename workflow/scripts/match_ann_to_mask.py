@@ -95,6 +95,9 @@ def match_ann_to_image(idx_df: pd.DataFrame):
 
     matched_ann_image_df = matched_ann_image_df.reset_index(drop = True)
 
+    if matched_ann_image_df.empty: 
+        raise ValueError("Annotation-image matching dataframe empty. No matches found.")
+
     return matched_ann_image_df
 
 def match_img_to_seg(idx_df: pd.DataFrame, 
@@ -163,7 +166,10 @@ def match_img_to_seg(idx_df: pd.DataFrame,
         img_ser_UIDs.append(curr_img_ser_UID)
 
     matched_img_seg_df = matched_img_seg_df.reset_index(drop = True)
-            
+    
+    if matched_img_seg_df.emtpy: 
+        raise ValueError("Image-segmentation matching dataframe empty. No matches found.")
+    
     return matched_img_seg_df
 
 #This is for if the json file has all necessary information as of now.
