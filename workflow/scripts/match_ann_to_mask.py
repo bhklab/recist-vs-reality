@@ -57,7 +57,7 @@ def match_ann_to_image(idx_df: pd.DataFrame):
             logger.info("SR ReferencedSeriesUID for Patient ID: %s has one or more duplicates. Relevant data below:", sr_info["PatientID"].values[0])
             logger.info(sr_info)
 
-        matching_image = idx_df[(idx_df["Modality"] == "CT") & (idx_df["SeriesInstanceUID"] == ref_seriesUID)].reset_index(drop = True)
+        matching_image = idx_df[((idx_df["Modality"] == "CT") | (idx_df["Modality"] == "MR")) & (idx_df["SeriesInstanceUID"] == ref_seriesUID)].reset_index(drop = True)
         if matching_image.shape[0] > 1:
             logger.debug("Imaging SeriesInstanceUID for Patient ID: %s has one or more duplicates. Relevant data below:", matching_image["PatientID"].values[0])
             logger.debug(matching_image)
@@ -790,6 +790,12 @@ def run_matching(idx_dicom_file: str,
 
     matched_img_seg_df = match_img_to_seg(index_df, matched_ann_img_df) 
 
+    if not df_out_path.exists():
+        Path(df_out_path).mkdir(parents=True, exist_ok = True)
+
+    if not plot_out_path.exists(): 
+        Path(plot_out_path).mkdir(parents=True, exist_ok = True)
+
     if get_intermediate_dfs: 
         matched_ann_img_df.to_csv(df_out_path / "matching_ann_to_img.csv", index = False)
         matched_img_seg_df.to_csv(df_out_path / "matching_img_to_seg.csv", index = False)
@@ -815,13 +821,13 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
     logging.basicConfig(filename='/home/bhkuser/bhklab/kaitlyn/aaura_paper0/logs/match_no_match_ann_img_seg_NSCLC.log', encoding='utf-8', level=logging.DEBUG)
     
-    idx_dicom_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-PDA/.imgtools/images/index.csv"
-    idx_nifti_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-PDA/images/mit_CPTAC-PDA/mit_CPTAC-PDA_index.csv"
-    dicom_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-PDA/.imgtools/images/crawl_db.json"
-    ann_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-PDA/images/annotations/CPTAC-PDA"
-    seg_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-PDA/"
-    out_path = Path("/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/data/procdata/Abdomen/TCIA_CPTAC-CCRCC/metadata/annotation_seg_matching")
-    img_out_path = Path("/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/data/results/TCIA_CPTAC-PDA/visualization/annotation_seg_matching")
+    idx_dicom_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/.imgtools/images/index.csv"
+    idx_nifti_path = dirs.PROCDATA / "Lung/TCIA_NSCLC-Radiogenomics/images/mit_NSCLC-Radiogenomics/mit_NSCLC-Radiogenomics_index.csv"
+    dicom_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/.imgtools/images/crawl_db.json"
+    ann_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/images/annotations/NSCLC-Radiogenomics"
+    seg_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/"
+    out_path = Path("/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/data/procdata/Lung/TCIA_NSCLC-Radiogenomics/metadata/annotation_seg_matching")
+    img_out_path = Path("/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/data/results/TCIA_NSCLC-Radiogenomics/visualization/annotation_seg_matching")
 
     if not out_path.exists():
         Path(out_path).mkdir(parents=True, exist_ok = True)
