@@ -313,7 +313,7 @@ def get_rtstruct_SOPUIDs(rtstruct_dicom_path: Path):
     Parameters
     ----------
     rtstruct_dicom_path: Path   
-        Path to RTSTRUCT folder
+        Path to RTSTRUCT file
 
     Returns
     rtstruct_SOPUIDs: list 
@@ -352,7 +352,7 @@ def get_nifti_locs(nifti_idx_path: Path,
     seg_nifti_path: Path 
         Path to the associated segmentation nifti file 
     '''
-
+    no_nifti = False
     nifti_path = Path("/".join(str(nifti_idx_path).split("/")[:-1]))
     nifti_idx_df = pd.read_csv(nifti_idx_path)
 
@@ -362,6 +362,15 @@ def get_nifti_locs(nifti_idx_path: Path,
     img_nifti = nifti_idx_df[nifti_idx_df["SeriesInstanceUID"] == img_instUID]["filepath"]
     seg_nifti = nifti_idx_df[nifti_idx_df["SeriesInstanceUID"] == seg_instUID]["filepath"]
 
+    if img_nifti.empty: 
+        logger.info("Imaging SeriesInstanceUID: %s does not have a matching nifti file.")
+        no_nifti = True
+    elif seg_nifti.empty: 
+        logger.info("Segmentation SeriesInstanceUID: %s does not have a matching nifti file.")
+        no_nifti = True
+
+    if no_nifti: 
+        return "", ""
     img_nifti_path = nifti_path / img_nifti.values[0]
     seg_niftis = nifti_path / seg_nifti
 
@@ -469,7 +478,10 @@ def confirm_ann_seg_match(tum_info_df: pd.DataFrame,
     is_in_seg: bool 
         Returns 0 if intersection is not in the segmentation and 1 if it is
     '''
-
+    #Checks if there was an available nifti file for the listed pair
+    if img_nifti_path == "" and seg_nifti_path == "": 
+        return 0 
+    
     img_nifti = sitk.ReadImage(img_nifti_path)
     seg_nifti = sitk.ReadImage(seg_nifti_path)
 
@@ -821,13 +833,13 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
     logging.basicConfig(filename='/home/bhkuser/bhklab/kaitlyn/aaura_paper0/logs/match_no_match_ann_img_seg.log', encoding='utf-8', level=logging.DEBUG)
     
-    idx_dicom_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/.imgtools/images/index.csv"
-    idx_nifti_path = dirs.PROCDATA / "Lung/TCIA_NSCLC-Radiogenomics/images/mit_NSCLC-Radiogenomics/mit_NSCLC-Radiogenomics_index.csv"
-    dicom_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/.imgtools/images/crawl_db.json"
-    ann_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/images/annotations/NSCLC-Radiogenomics"
-    seg_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/"
-    out_path = dirs.PROCDATA / "Lung/TCIA_NSCLC-Radiogenomics/metadata/annotation_seg_matching"
-    img_out_path = dirs.RESULTS / "TCIA_NSCLC-Radiogenomics/visualization/annotation_seg_matching"
+    idx_dicom_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/.imgtools/images/index.csv"
+    idx_nifti_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-CCRCC/images/mit_CPTAC-CCRCC/mit_CPTAC-CCRCC_index.csv"
+    dicom_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/.imgtools/images/crawl_db.json"
+    ann_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/images/annotations/CPTAC-CCRCC"
+    seg_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/"
+    out_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-CCRCC/metadata/annotation_seg_matching"
+    img_out_path = dirs.RESULTS / "TCIA_CPTAC-CCRCC/visualization/annotation_seg_matching"
 
     if not out_path.exists():
         Path(out_path).mkdir(parents=True, exist_ok = True)
