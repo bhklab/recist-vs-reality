@@ -819,15 +819,15 @@ def run_matching(idx_dicom_file: str,
     
 if __name__ == '__main__': 
     logger = logging.getLogger(__name__)
-    logging.basicConfig(filename='/home/bhkuser/bhklab/kaitlyn/aaura_paper0/logs/match_no_match_ann_img_seg_NSCLC.log', encoding='utf-8', level=logging.DEBUG)
+    logging.basicConfig(filename='/home/bhkuser/bhklab/kaitlyn/aaura_paper0/logs/match_no_match_ann_img_seg.log', encoding='utf-8', level=logging.DEBUG)
     
     idx_dicom_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/.imgtools/images/index.csv"
     idx_nifti_path = dirs.PROCDATA / "Lung/TCIA_NSCLC-Radiogenomics/images/mit_NSCLC-Radiogenomics/mit_NSCLC-Radiogenomics_index.csv"
     dicom_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/.imgtools/images/crawl_db.json"
     ann_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/images/annotations/NSCLC-Radiogenomics"
     seg_data_path = dirs.RAWDATA / "Lung/TCIA_NSCLC-Radiogenomics/"
-    out_path = Path("/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/data/procdata/Lung/TCIA_NSCLC-Radiogenomics/metadata/annotation_seg_matching")
-    img_out_path = Path("/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/data/results/TCIA_NSCLC-Radiogenomics/visualization/annotation_seg_matching")
+    out_path = dirs.PROCDATA / "Lung/TCIA_NSCLC-Radiogenomics/metadata/annotation_seg_matching"
+    img_out_path = dirs.RESULTS / "TCIA_NSCLC-Radiogenomics/visualization/annotation_seg_matching"
 
     if not out_path.exists():
         Path(out_path).mkdir(parents=True, exist_ok = True)
