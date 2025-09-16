@@ -26,11 +26,14 @@ def match_ann_to_image(idx_df: pd.DataFrame):
     matched_ann_image_df: pd.DataFrame 
         Contains the information about the matching annotation-image instances, where each row represents a patient's matched data
     '''
+    #Create list for columns for initializing the "matching annotation to image" dataframe to be returned
+    #Prefix "Ann" for information relating to or in the annotation file 
+    #Prefix "Img" for information relating to or in the imaging file (CT, MRI, etc.)
     cols = ["AnnPatientID", 
             "ImgPatientID",
-            "AnnStudyInstanceUID",
+            "AnnStudyInstanceUID", #StudyInstanceUIDs should be the same between annotation and image if they have been matched properly
             "ImgStudyInstanceUID", 
-            "AnnReferencedSeriesUID",
+            "AnnReferencedSeriesUID", #AnnReferencedSeriesUID should match ImgSeriesInstanceUID if they have been matched properly
             "ImgSeriesInstanceUID",  
             "ImgLocation", 
             "ImgSubSeries", 
@@ -38,38 +41,42 @@ def match_ann_to_image(idx_df: pd.DataFrame):
             "AnnLocation", 
             "AnnSubSeries", 
             "AnnModality",
-            "AnnSeriesInstanceUID"]
+            "AnnSeriesInstanceUID" #Unique identifier for the annotation file
+            ]
     
     matched_ann_image_df = pd.DataFrame(columns = cols)
     
-    sr_df = idx_df[(idx_df["Modality"] == "SR")] 
+    sr_df = idx_df[(idx_df["Modality"] == "SR")] #Specifically looks for structured reports as the annotation files.
 
     sr_ref_ser_UIDs = list()
     for ref_seriesUID in sr_df["ReferencedSeriesUID"].tolist(): 
         if ref_seriesUID in sr_ref_ser_UIDs: 
+            #All SR's with a specific reference ID will be gotten on the first instance of it. Therefore skips the referenced imaging ID if it's already been searched for.   
             continue
         
-        dupe_img_seriesID = False
+        dupe_img_seriesID = False #Flag for a duplicate imaging series instance. Needed to check for multiple subseries. 
 
-        sr_info = idx_df[(idx_df["Modality"] == "SR") & (idx_df["ReferencedSeriesUID"] == ref_seriesUID)].reset_index(drop = True)
+        sr_info = idx_df[(idx_df["Modality"] == "SR") & (idx_df["ReferencedSeriesUID"] == ref_seriesUID)].reset_index(drop = True) #Subset dataframe by the current imaging referenced by the annotation
 
-        if sr_info.shape[0] > 1: 
+        if sr_info.shape[0] > 1: #Checks if multiple annotations were done on the same image
             logger.info("SR ReferencedSeriesUID for Patient ID: %s has one or more duplicates. Relevant data below:", sr_info["PatientID"].values[0])
             logger.info(sr_info)
 
-        matching_image = idx_df[((idx_df["Modality"] == "CT") | (idx_df["Modality"] == "MR")) & (idx_df["SeriesInstanceUID"] == ref_seriesUID)].reset_index(drop = True)
+        matching_image = idx_df[((idx_df["Modality"] == "CT") | (idx_df["Modality"] == "MR")) & (idx_df["SeriesInstanceUID"] == ref_seriesUID)].reset_index(drop = True) #Finds the matching imaging referenced by the annotation
         if matching_image.shape[0] > 1:
+            #There is more than one mention of the referenced imaging in the index file. This usually means the imaging has multiple subseries.
             logger.debug("Imaging SeriesInstanceUID for Patient ID: %s has one or more duplicates. Relevant data below:", matching_image["PatientID"].values[0])
             logger.debug(matching_image)
             logger.debug(sr_info)
             dupe_img_seriesID = True
 
         elif matching_image.empty: 
+            #Goes onto the next referenced imaging ID if no match for the current one was found in the index file. 
             logger.info("No matching imaging SeriesInstanceUID for Patient ID: %s with SR ReferencedSeriesUID: %s", sr_info["PatientID"].values[0], ref_seriesUID)
             continue
 
         if dupe_img_seriesID: 
-            img_subseries = "N/A"
+            img_subseries = "N/A" #Set like this as an indicator further analysis is needed to find subseries. This is done in the match_ann_to_seg function.
         else: 
             img_subseries = matching_image["SubSeries"].values[0]
 
@@ -87,11 +94,11 @@ def match_ann_to_image(idx_df: pd.DataFrame):
                             row["SubSeries"], 
                             row["Modality"],
                             row["SeriesInstanceUID"]
-                            ]
+                            ] 
             matched_df = pd.DataFrame([matched_info], columns = cols)
             matched_ann_image_df = pd.concat([matched_ann_image_df, matched_df])
 
-        sr_ref_ser_UIDs.append(ref_seriesUID)
+        sr_ref_ser_UIDs.append(ref_seriesUID) #Adds current referenced imaging ID for the duplicate check at the start of the function. 
 
     matched_ann_image_df = matched_ann_image_df.reset_index(drop = True)
 
@@ -171,8 +178,6 @@ def match_img_to_seg(idx_df: pd.DataFrame,
         raise ValueError("Image-segmentation matching dataframe empty. No matches found.")
     
     return matched_img_seg_df
-
-#This is for if the json file has all necessary information as of now.
 
 def get_axes_intersection(tum_info_df: pd.DataFrame): 
     '''
