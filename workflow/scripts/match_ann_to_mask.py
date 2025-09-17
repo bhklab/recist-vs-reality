@@ -241,23 +241,27 @@ def get_ann_measurements(ann_dicom_file_path: Path):
     all_tum_info_df: pd.DataFrame
         Contains information related to file and the long and short axis measurements
     '''
+    #Columns used to describe the information obtained and outputted in the tumour info dataframe. Each row represents an annotation found in the SR file.
+    #Intersection column header not mentioned as this is calculated and added after all information found in the SR file has been compiled and entered into the tumour info dataframe. 
     cols = ["AnnPatientID",
-            "AnnSeriesInstanceUID", 
-            "AnnReferencedSeriesUID",
+            "AnnSeriesInstanceUID", #Unique file identifier for annotation file
+            "AnnReferencedSeriesUID", #The image ID that the annotation file references
             "LongAxisMeasureType", 
             "LongAxisUnit", 
             "LongAxisMeasurement", 
-            "LongAxisRefSOPUID", 
-            "LongAxisCoords",
+            "LongAxisRefSOPUID", #The slice that the long axis was drawn on
+            "LongAxisCoords", #Coordinates used int he 
             "ShortAxisMeasureType", 
             "ShortAxisUnit", 
             "ShortAxisMeasurement", 
-            "ShortAxisRefSOPUID",
+            "ShortAxisRefSOPUID", #The slice the short axis was drawn on. This should be the same as the long axis slice for each row
             "ShortAxisCoords"]
     
-    tum_info_df = pd.DataFrame(columns = cols)
-    dicom_data = pydicom.dcmread(ann_dicom_file_path)
+    tum_info_df = pd.DataFrame(columns = cols) #Initialize tumour info datarame 
+    dicom_data = pydicom.dcmread(ann_dicom_file_path) #Read in the DICOM data from the SR file
 
+    #Access and gather information relevant to the matching process. Logs the process in the corresponding logger file. 
+    #For more information on how this DICOM data is structured and why certain indices are accessed, please refer to the devnotes_kaitlyn.md file
     ann_seriesInstUID = dicom_data.SeriesInstanceUID
     ann_patientID = dicom_data.PatientID
     parent_cont_seq = dicom_data.ContentSequence
@@ -300,6 +304,7 @@ def get_ann_measurements(ann_dicom_file_path: Path):
             logger.debug("Long axis RefSOPUID: %s", ref_SOPUID_long)
             logger.debug("Short axis RefSOPUID: %s", ref_SOPUID_short)
 
+        #Create one row dataframe of current annotation information with the same structure as the overall tumour info to prep it for concatenation. 
         curr_tum_info = [ann_patientID,
                          ann_seriesInstUID, 
                          ann_refSeriesInstUID,
@@ -316,11 +321,13 @@ def get_ann_measurements(ann_dicom_file_path: Path):
         
         curr_tum_df = pd.DataFrame([curr_tum_info], columns = cols)
         
+        #Checks if anything has been added to the initial dataframe yet and then concatenates current information with the previously gathered information if applicable. 
         if tum_info_df.empty: 
             tum_info_df = curr_tum_df
         else:
             tum_info_df = pd.concat([tum_info_df, curr_tum_df])
 
+    #Get the intersection point of the long and short axes. To be used to confirm annotation-segmentation match later. 
     all_tum_info_df = get_axes_intersection(tum_info_df)
 
     return all_tum_info_df
