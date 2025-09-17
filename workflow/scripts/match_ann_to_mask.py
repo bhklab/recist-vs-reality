@@ -100,9 +100,9 @@ def match_ann_to_image(idx_df: pd.DataFrame):
 
         sr_ref_ser_UIDs.append(ref_seriesUID) #Adds current referenced imaging ID for the duplicate check at the start of the function. 
 
-    matched_ann_image_df = matched_ann_image_df.reset_index(drop = True)
+    matched_ann_image_df = matched_ann_image_df.reset_index(drop = True) #Makes sure all of the indices aren't just 0's, which can cause concat issues
 
-    if matched_ann_image_df.empty: 
+    if matched_ann_image_df.empty: #Only entered if there are no matching images for any of the segmentations.
         raise ValueError("Annotation-image matching dataframe empty. No matches found.")
 
     return matched_ann_image_df
@@ -138,22 +138,26 @@ def match_img_to_seg(idx_df: pd.DataFrame,
             "SegSeriesInstanceUID",
            ]
     
-    matched_img_seg_df = pd.DataFrame(columns = cols)
-    
-    seg_df = idx_df[(idx_df["Modality"] == "RTSTRUCT") | (idx_df["Modality"] == "SEG")].reset_index(drop = True)
-
-    #NOTE TO SELF: Need to add compatibility with having duplicate img_ser_UIDs, maybe do this by subseries? For now just ignoring. 
+    matched_img_seg_df = pd.DataFrame(columns = cols) #Initialize the final matched image-segmentation dataframe with appropriate columns.
+     
+    seg_df = idx_df[(idx_df["Modality"] == "RTSTRUCT") | (idx_df["Modality"] == "SEG")].reset_index(drop = True)  #Find any segmentation files that have RTSTRUCT or SEG structure (if more, add later)
+ 
     img_ser_UIDs = list()
-    for idx_img, row_img in matched_ann_img_df.iterrows(): 
+    for idx_img, row_img in matched_ann_img_df.iterrows(): #Go through only the images that have annotation matches to see if they also have segmentations
         curr_img_ser_UID = row_img["ImgSeriesInstanceUID"]
         if curr_img_ser_UID in img_ser_UIDs:  #If already searched through this SeriesInstanceUID, skip. 
             continue
-        matching_seg = seg_df[seg_df["ReferencedSeriesUID"] == curr_img_ser_UID].reset_index(drop = True) 
-        if matching_seg.shape[0] > 1: 
+
+        matching_seg = seg_df[seg_df["ReferencedSeriesUID"] == curr_img_ser_UID].reset_index(drop = True) #Get all of the segmentations that reference the current imaging series ID 
+
+        if matching_seg.shape[0] > 1: #Log if an image has more than one segmentation associated with it
             logger.info("Imaging SeriesInstanceUID: %s for Patient ID: %s has two or more segmentation ReferencedSeriesUID matches. Relevant data below: ", curr_img_ser_UID, row_img["ImgPatientID"])
             logger.info(matching_seg)
-        
-        for idx_seg, row_seg in matching_seg.iterrows(): 
+        elif matching_seg.empty: #If there are no matches, log and skip to next case.
+            logger.info("Imaging SeriesInstanceUID: %s for Patient ID: %s does not have any segmentation matches", curr_img_ser_UID, row_img["ImgPatientID"])
+            continue 
+
+        for idx_seg, row_seg in matching_seg.iterrows(): #Record all segmentation data found to match the current image, each segmentation getting it's own row
             matched_info = [row_seg["PatientID"],
                             row_img["ImgPatientID"], 
                             row_seg["StudyInstanceUID"],
@@ -170,11 +174,11 @@ def match_img_to_seg(idx_df: pd.DataFrame,
             matched_df = pd.DataFrame([matched_info], columns = cols)
             matched_img_seg_df = pd.concat([matched_img_seg_df, matched_df])
         
-        img_ser_UIDs.append(curr_img_ser_UID)
+        img_ser_UIDs.append(curr_img_ser_UID) #Add to list at start to make sure you don't search for the same image twice. 
 
-    matched_img_seg_df = matched_img_seg_df.reset_index(drop = True)
+    matched_img_seg_df = matched_img_seg_df.reset_index(drop = True) #Makes sure all of the indices aren't just 0's, which can cause concat issues
     
-    if matched_img_seg_df.emtpy: 
+    if matched_img_seg_df.emtpy: #Only entered if the search ends up having no matching segmentations for any of the annotation-associated images. 
         raise ValueError("Image-segmentation matching dataframe empty. No matches found.")
     
     return matched_img_seg_df
