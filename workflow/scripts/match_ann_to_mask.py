@@ -347,11 +347,15 @@ def get_rtstruct_SOPUIDs(rtstruct_dicom_path: Path):
         Contains all of the mentioned slice IDs in the given RTSTRUCT file. 
     '''
 
+    #Read in the current RTSTRUCT DICOM data. 
+    #For more information on why this function is necessary and the indices and sequences chosen, please refer to the devnotes_kaitlyn.md file. 
     dicom_data = pydicom.dcmread(rtstruct_dicom_path)
     
+    #Navigate to the segmentation slice ID information. 
     parent_sequence = dicom_data.ReferencedFrameOfReferenceSequence
     seg_seq = parent_sequence[0]["RTReferencedStudySequence"][0]["RTReferencedSeriesSequence"][0]["ContourImageSequence"]
 
+    #Go through all of the items in the contour image sequence and find and denote the slice IDs found. 
     rtstruct_SOPUIDs = list()
     for element in range(len(seg_seq.value)): 
         if "ReferencedSOPInstanceUID" in seg_seq[element]: 
