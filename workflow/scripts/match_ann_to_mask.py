@@ -383,16 +383,19 @@ def get_nifti_locs(nifti_idx_path: Path,
     seg_nifti_path: Path 
         Path to the associated segmentation nifti file 
     '''
-    no_nifti = False
-    nifti_path = Path("/".join(str(nifti_idx_path).split("/")[:-1]))
-    nifti_idx_df = pd.read_csv(nifti_idx_path)
+    no_nifti = False #Flag set for testing if the corresponding DICOM files got converted to nifti successfully. 
+    nifti_path = Path("/".join(str(nifti_idx_path).split("/")[:-1])) #nifti files in same folder as nifti index file, so want to get just the path to that folder.
+    nifti_idx_df = pd.read_csv(nifti_idx_path) #Read in nifti index info to get the corresponding nifti filenames and relative paths
 
+    #Get the unique identifiers for the image and the segmentation files. 
     img_instUID = img_seg_info["ImgSeriesInstanceUID"].values[0]
     seg_instUID = img_seg_info["SegSeriesInstanceUID"].values[0]
 
+    #Using the image and segmentation IDs, find their corresponding nifti conversion filepaths from the index file. 
     img_nifti = nifti_idx_df[nifti_idx_df["SeriesInstanceUID"] == img_instUID]["filepath"]
     seg_nifti = nifti_idx_df[nifti_idx_df["SeriesInstanceUID"] == seg_instUID]["filepath"]
 
+    #Check if the matching was successful. If there is either a missing imaging or segmentation nifti conversion, raise flag.
     if img_nifti.empty: 
         logger.info("Imaging SeriesInstanceUID: %s does not have a matching nifti file.")
         no_nifti = True
@@ -400,11 +403,15 @@ def get_nifti_locs(nifti_idx_path: Path,
         logger.info("Segmentation SeriesInstanceUID: %s does not have a matching nifti file.")
         no_nifti = True
 
+    #If there isn't a match, return blank strings for both. 
+    #Using the blank strings so I can do an equality comparison of path variables in the annotation-segmentation confirmation and return a no match if both variables are blank. 
     if no_nifti: 
         return "", ""
     img_nifti_path = nifti_path / img_nifti.values[0]
     seg_niftis = nifti_path / seg_nifti
 
+    #To change later to be more robust with different file names. For now, just access a segemntation file if it references 
+    #'GTV' key term. Cannot handle multiple segmentations with different names in the same file at the moment. 
     for row in seg_niftis.items(): 
         path = str(row[1])
         if "GTV" in path: 
