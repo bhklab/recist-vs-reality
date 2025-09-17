@@ -198,25 +198,30 @@ def get_axes_intersection(tum_info_df: pd.DataFrame):
         The same tum_info_df but with an added column named "AnnLongShortIntersection" containing an array representing the interesection point [x,y] 
     '''
 
-    axis_intersects = []
-    for idx, row in tum_info_df.iterrows(): 
+    axis_intersects = [] #Initialize array to hold the axis intersection point. Will be in the form of [x_intersect, y_intersect]
+    for idx, row in tum_info_df.iterrows(): #Goes through each of the annotation measurements (covers cases where multiple measurements are in the same SR)
+        #Get long and short axis coordinates, defined by two points. Coordinates are listed as [x1, y1, x2, y2]
         long_ax_coords = row["LongAxisCoords"]
         short_ax_coords = row["ShortAxisCoords"] 
         
+        #Create points from the long and short axis coordinate arrays 
         long_x1y1 = gm.Point(long_ax_coords[0], long_ax_coords[1])
         long_x2y2 = gm.Point(long_ax_coords[2], long_ax_coords[3])
         short_x1y1 = gm.Point(short_ax_coords[0], short_ax_coords[1])
         short_x2y2 = gm.Point(short_ax_coords[2], short_ax_coords[3])
 
+        #Create the long and short axis lines defined by the points above
         long_axis = gm.Line(long_x1y1, long_x2y2)
         short_axis = gm.Line(short_x1y1, short_x2y2)
 
+        #Calculate the intersection of the long and short axis measurements. 
         intersection = (long_axis.intersection(short_axis))[0].evalf()
         intersect_array = [intersection[0], intersection[1]]
         
         axis_intersects.append(intersect_array)
     
-    tum_info_df["AnnLongShortIntersection"] = axis_intersects
+    #Add the intersections for each of the measurements into the tumour dataframe. Assumes that order of appended intersection points is the same as looping order. 
+    tum_info_df["AnnLongShortIntersection"] = axis_intersects 
     tum_info_and_intersect_df = tum_info_df
 
     return tum_info_and_intersect_df
