@@ -436,10 +436,10 @@ def get_slice_num(inst_slice: str,
         The slice number aligned with the nifti slices
     '''
 
-    subseries_slice = inst_slice.split(".")[0]
-    dicom_slice = int(subseries_slice.split("-")[-1])
+    subseries_slice = inst_slice.split(".")[0] #Takes the name of the DICOM instance and removes the ".dcm" at the end
+    dicom_slice = int(subseries_slice.split("-")[-1]) #Gets the slice number from the name of the DICOM instance. See devnotes_kaitlyn.md for more.
 
-    slice_num = num_of_slices - dicom_slice + 1 #subtracting since the nifti's slices are referenced backwards from the dicom slices and adding one because nifti slices start at index 0
+    slice_num = num_of_slices - dicom_slice + 1 #See devnotes_kaitlyn.md for breakdown of this calculation. 
     
     return slice_num 
 
