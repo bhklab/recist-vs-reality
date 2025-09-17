@@ -462,22 +462,22 @@ def plot_img_seg_ann(tum_info: pd.Series,
         Where to save the plot once finished
     '''
     
-    plt.imshow(img_slice, cmap="Greys_r")
-    plt.imshow(seg_slice, alpha = 0.7, cmap ="Accent")
+    plt.imshow(img_slice, cmap="Greys_r") #Plot imaging with a grayscale adjustment. 
+    plt.imshow(seg_slice, alpha = 0.7, cmap ="Accent") #Overlay the a translucent segmentation mask over the image to denote the tumour. 
     plt.plot([tum_info["LongAxisCoords"][0], tum_info["LongAxisCoords"][2]], 
                [tum_info["LongAxisCoords"][1], tum_info["LongAxisCoords"][3]], 
-               'ro-', markersize = 2, linewidth = 1)
+               'ro-', markersize = 2, linewidth = 1) #Plots the long axis line in red.
     plt.plot([tum_info["ShortAxisCoords"][0], tum_info["ShortAxisCoords"][2]], 
              [tum_info["ShortAxisCoords"][1], tum_info["ShortAxisCoords"][3]], 
-             'bo-', markersize = 2, linewidth = 1)
+             'bo-', markersize = 2, linewidth = 1) #Plots the short axis line in blue.
     plt.plot(tum_info["AnnLongShortIntersection"][0], tum_info["AnnLongShortIntersection"][1], 
-             'yo', markersize = 2)
-    plt.text(2, -5, "RefSOPUID: " + tum_info["LongAxisRefSOPUID"], fontsize=6)
+             'yo', markersize = 2) #Plots the intersection of the short and long axis by a yellow dot. 
+    plt.text(2, -5, "RefSOPUID: " + tum_info["LongAxisRefSOPUID"], fontsize=6) #Put the slice ID so it can differentiate from different annotations
 
     patient_ann = 0
-    save_name = tum_info["AnnPatientID"] + "_" + str(patient_ann) + ".png"
+    save_name = tum_info["AnnPatientID"] + "_" + str(patient_ann) + ".png" #Create plot save name
     out_path = save_path / save_name 
-    while out_path.exists(): 
+    while out_path.exists(): #If a patient has multiple annotations, it needs to differentiate between them in the file name or else the plots will override themselves. 
         patient_ann +=1
         save_name = tum_info["AnnPatientID"] + "_" + str(patient_ann) + ".png"
         out_path = save_path / save_name 
