@@ -644,8 +644,7 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                      match_img_seg_df: pd.DataFrame, 
                      dicom_info_dict: dict, 
                      nifti_idx_path: Path,
-                     ann_dicom_path: Path, 
-                     seg_dicom_path: Path,
+                     ann_seg_dicom_path: Path,
                      img_out_path: Path):
     '''
     Using the information from the previous two functions above, find which segmentation the annotation belongs to
@@ -662,10 +661,8 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
         Contains the DICOM information found in the med-imagetools generated crawl_db.json file. 
     nifti_idx_path: Path
         Path to index file created by med-imagetools for the nifti versions of the CT and segmentation files
-    ann_dicom_path: Path 
-        Path to folder holding all raw annotation DICOM data
-    seg_dicom_path: Path 
-        Path to folder holding all raw SEG/RTSTRUCT DICOM data
+    ann_seg_dicom_path: Path 
+        Path to folder holding all raw SEG/RTSTRUCT and SR DICOM data
     img_out_path: Path
         Path to folder where the overlay image-segmentation-annotation images will go
 
@@ -722,7 +719,7 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
         filename = ann_dicom_info["instances"][inst[0]]
         logger.info("Corresponding annotation file for below measurements: %s", filename) #Assumes only one instance for each SR
         
-        ann_file_path = ann_dicom_path / filename
+        ann_file_path = ann_seg_dicom_path / img_ann_info["AnnLocation"].iloc[0] / filename
         tum_measurements = get_ann_measurements(ann_file_path)
         
         ann_refSeriesUID = ann_dicom_info["ReferencedSeriesUID"]
@@ -764,7 +761,7 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                 elif curr_info["SegModality"].values[0] == "RTSTRUCT": 
                     seg_partial_path = seg_dicom_info["folder"]
                     #Check for multiple files within the folder
-                    seg_dicom_folder = seg_dicom_path / seg_partial_path
+                    seg_dicom_folder = ann_seg_dicom_path / seg_partial_path
                     file_num = len([f for f in seg_dicom_folder.iterdir() if f.is_file()]) #Gets number of files in the folder to see if additional searching for the correct segmentation is necessary.
                     if file_num > 1: 
                         #Check each one for the correct segmentation series instance UID. 
@@ -904,7 +901,6 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
 @click.option('--idx_dicom_file', help = 'Path and name of DICOM index.csv file created by med-imagetools')
 @click.option('--idx_nifti_file', help = 'Path and name of mit_DATASET_index.csv file creaded by med-imagetools')
 @click.option('--crawl_db_file', help = 'Path and name of crawl_db.json file created by med-imagetools')
-@click.option('--ann_dcm_path', help = 'Path to all annotation dicom files')
 @click.option('--dataset_path', help = 'Path containing images folder for annotations, imaging, and segmentations. Used to get segmentations')
 @click.option('--log_path', help = 'Path for log file to be created')
 @click.option('--df_out_path', help = 'Destination for outputted csv files')
@@ -957,8 +953,7 @@ def run_matching(idx_dicom_file: str,
                                                              match_img_seg_df = matched_img_seg_df, 
                                                              dicom_info_dict = dicom_data_dict, 
                                                              nifti_idx_path = idx_nifti_file, 
-                                                             ann_dicom_path = ann_dcm_path, 
-                                                             seg_dicom_path = dataset_path, 
+                                                             ann_seg_dicom_path = dataset_path, 
                                                              img_out_path = plot_out_path)
         matched_ann_seg.to_csv(df_out_path / "matching_ann_to_seg.csv", index = False)
         no_match_ann_seg.to_csv(df_out_path / "no_matching_ann_to_seg.csv", index = False)
@@ -972,8 +967,7 @@ if __name__ == '__main__':
     idx_dicom_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/.imgtools/images/index.csv"
     idx_nifti_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-CCRCC/images/mit_CPTAC-CCRCC/mit_CPTAC-CCRCC_index.csv"
     dicom_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/.imgtools/images/crawl_db.json"
-    ann_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/images/annotations/CPTAC-CCRCC"
-    seg_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/"
+    ann_seg_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/"
     #out_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-CCRCC/metadata/annotation_seg_matching"
     #img_out_path = dirs.RESULTS / "TCIA_CPTAC-CCRCC/visualization/annotation_seg_matching"
 
@@ -999,8 +993,7 @@ if __name__ == '__main__':
                                                              match_img_seg_df = matched_img_seg_df, 
                                                              dicom_info_dict = dicom_data_dict, 
                                                              nifti_idx_path = idx_nifti_path, 
-                                                             ann_dicom_path = ann_data_path, 
-                                                             seg_dicom_path = seg_data_path, 
+                                                             ann_seg_dicom_path = ann_seg_data_path,  
                                                              img_out_path = img_out_path)
         matched_ann_seg.to_csv(out_path / "matching_ann_to_seg.csv", index = False)
         no_match_ann_seg.to_csv(out_path / "no_match_ann_to_seg.csv", index = False)
