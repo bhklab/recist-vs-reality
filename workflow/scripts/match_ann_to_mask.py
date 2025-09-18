@@ -7,6 +7,7 @@ import sympy.geometry as gm
 import SimpleITK as sitk
 import numpy as np
 import matplotlib.pyplot as plt
+import itertools
 
 from damply import dirs
 from pathlib import Path
@@ -364,6 +365,37 @@ def get_rtstruct_SOPUIDs(rtstruct_dicom_path: Path):
 
     return rtstruct_SOPUIDs
 
+def compare_niftis(seg_nifti_ser = pd.Series): 
+    '''
+    Compares segmentation nifti files to see if they contain the same information. 
+
+    Parameters
+    ----------
+    seg_nifti_ser: pd.Series
+        Contains the segmentation files to compare. 
+    
+    Returns
+    ----------
+    same_segments: bool 
+        Flags whether all the segmentations tested were the same. 
+    '''
+    possible_segs = seg_nifti_ser.to_list()
+    for nifti_a, nifti_b in itertools.combinations(possible_segs, 2): #Iterate over all unique combinations of nifti files 
+            #Read in current nifti segmentation pair to compare
+            seg_nifti_a = sitk.ReadImage(nifti_a) 
+            seg_nifti_b = sitk.ReadImage(nifti_b)
+
+            #Convert segmentations to arrays for comparison 
+            arr_nifti_a = sitk.GetArrayFromImage(seg_nifti_a) 
+            arr_nifti_b = sitk.GetArrayFromImage(seg_nifti_b)
+
+            same_segments = np.arary_equal(arr_nifti_a, arr_nifti_b)
+            if not same_segments: 
+                logger.debug("Segmentations %s and %s are mapped to the same SeriesInstanceUID but are not the same. Please investigate.", str(nifti_a), str(nifti_b))
+                break
+    
+    return same_segments
+
 def get_nifti_locs(nifti_idx_path: Path, 
                    img_seg_info: pd.DataFrame): 
     '''
@@ -402,20 +434,26 @@ def get_nifti_locs(nifti_idx_path: Path,
     elif seg_nifti.empty: 
         logger.info("Segmentation SeriesInstanceUID: %s does not have a matching nifti file.")
         no_nifti = True
-
+    
     #If there isn't a match, return blank strings for both. 
     #Using the blank strings so I can do an equality comparison of path variables in the annotation-segmentation confirmation and return a no match if both variables are blank. 
     if no_nifti: 
         return "", ""
+    
     img_nifti_path = nifti_path / img_nifti.values[0]
     seg_niftis = nifti_path / seg_nifti
 
-    #To change later to be more robust with different file names. For now, just access a segemntation file if it references 
-    #'GTV' key term. Cannot handle multiple segmentations with different names in the same file at the moment. 
-    for row in seg_niftis.items(): 
-        path = str(row[1])
-        if "GTV" in path: 
-            seg_nifti_path = Path(path)
+    #Check for multiple segmentation niftis mapped to the same SeriesInstanceUID 
+    if seg_niftis.size > 1: 
+        #Want to see if the files listed are just duplicates or if two segmentations got mapped to the same SeriesInstanceUID 
+        are_dupes = compare_niftis(seg_nifti_ser = seg_niftis)
+        if not are_dupes: 
+            return "", "" #Cannot discern match from just the SeriesInstanceUID, which requires further investigation. Skips and considers it a no match for now. 
+        else: 
+            seg_nifti_path = seg_niftis.iloc[0] #If all the files are the same, just pick the first one
+    else: 
+        seg_nifti_path = seg_niftis.iloc[0] #If there is only one file (because the empty case is already taken care of), get that path 
+
     
     return img_nifti_path, seg_nifti_path 
 
