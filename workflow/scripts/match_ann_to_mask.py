@@ -178,7 +178,7 @@ def match_img_to_seg(idx_df: pd.DataFrame,
 
     matched_img_seg_df = matched_img_seg_df.reset_index(drop = True) #Makes sure all of the indices aren't just 0's, which can cause concat issues
     
-    if matched_img_seg_df.emtpy: #Only entered if the search ends up having no matching segmentations for any of the annotation-associated images. 
+    if matched_img_seg_df.empty: #Only entered if the search ends up having no matching segmentations for any of the annotation-associated images. 
         raise ValueError("Image-segmentation matching dataframe empty. No matches found.")
     
     return matched_img_seg_df
@@ -516,31 +516,40 @@ def confirm_ann_seg_match(tum_info_df: pd.DataFrame,
     is_in_seg: bool 
         Returns 0 if intersection is not in the segmentation and 1 if it is
     '''
-    #Checks if there was an available nifti file for the listed pair
+    #Checks if there was an available nifti file for the listed pair. If not, return that there is no match available. 
     if img_nifti_path == "" and seg_nifti_path == "": 
         return 0 
     
-    img_nifti = sitk.ReadImage(img_nifti_path)
+    #Read in the image and segmentation nifti files
+    img_nifti = sitk.ReadImage(img_nifti_path) 
     seg_nifti = sitk.ReadImage(seg_nifti_path)
 
+    #Turn image and segmentation into arrays
     img_arr = sitk.GetArrayFromImage(img_nifti)
     seg_arr = sitk.GetArrayFromImage(seg_nifti)
-    np_seg_arr = np.ma.masked_where(seg_arr == 0, seg_arr) 
+    np_seg_arr = np.ma.masked_where(seg_arr == 0, seg_arr) #Preps the segmentation array for visualization, but does not hold the correct information for actual confirmation. 
 
-    img_slice_num = img_arr.shape[0]
+    #Get the number of slices in the image and segmentation. 
+    img_slice_num = img_arr.shape[0] 
     np_seg_slice_num = np_seg_arr.shape[0]
 
     if img_slice_num != np_seg_slice_num: 
+        #Only entered if the imaging and segmentation do not have a matching number of slices. This shouldn't happen if the 
+        #image and segmentation have been properly matched. For debugging purposes only. Return a no match if this happens.
         logger.debug("Image and segmentation have different number of slices. See below for relevant information: ")
         logger.debug("Nifti image path: %s", img_nifti_path)
         logger.debug("Nifti segmentation path: %s", seg_nifti_path)
 
         return 0 
 
+    #This should really only be one row with the current setup, but is set up this way in case there are multiple annotations with the same ID
+    #Iterate through the annotations, find the corresponding image and segmentation slice, and determine if the intersection point is within the segmentation mask. 
+    #If so, plot the match and save for further visualization. 
     for idx, row in tum_info_df.iterrows(): 
+        #Find the corresponding
         img_seriesInstUID = row["AnnReferencedSeriesUID"] 
         number_of_slices = img_slice_num
-        img_slice_dicom = dicom_data_dict[img_seriesInstUID][image_subseries]["instances"][row["LongAxisRefSOPUID"]]
+        img_slice_dicom = dicom_data_dict[img_seriesInstUID][image_subseries]["instances"][row["LongAxisRefSOPUID"]] #Get the slice instance name based on the referenced slice ID.
         
         slice_num = get_slice_num(img_slice_dicom, number_of_slices)
 
@@ -554,6 +563,44 @@ def confirm_ann_seg_match(tum_info_df: pd.DataFrame,
             plot_img_seg_ann(row, img_slice, np_seg_slice, overlay_out_path)
 
     return is_in_seg
+
+def find_correct_seg(seg_folder: Path, 
+                     seg_seriesInstUID: str): 
+    '''
+    Given a folder with multiple segmentations, go through all files and check the segmentation series ID and finds the file that matches the currently desired segmentation. 
+
+    Parameters 
+    ----------
+    seg_folder: Path
+        Folder containing the segmentations DICOM files to be tested. 
+    seg_seriesInstUID: str
+        The segmentation series that is trying to be matched. 
+
+    Returns
+    ----------
+    correct_seg_path: Path, 
+        The path to the segmentation DICOM file that was found to match the series ID
+    '''
+
+    for f in seg_folder.iterdir(): 
+        curr_filepath = seg_folder / f.name
+        
+        curr_dicom_info = pydicom.dcmread(curr_filepath) #Read in the current file to access the dicom information. 
+        curr_seriesInstUID = curr_dicom_info.SeriesInstanceUID #Get the current file's Series Instance UID 
+
+        if curr_seriesInstUID == seg_seriesInstUID: #If this series instance UID is the same as the one that is trying to be matched, store the filepath 
+            correct_seg_path = curr_filepath
+            break
+
+    #Check to see if there was ever a match and if there wasn't, log and return 0
+    try: 
+        correct_seg_path 
+    except NameError: 
+        logger.error("Segmentation DICOM listed as existing in the folder %s, but no match found.", str(seg_folder))
+        logger.error("Segmentation SeriesInstanceUID being searched for: %s", seg_seriesInstUID)
+        return ""
+    
+    return correct_seg_path
 
 def match_ann_to_seg(match_ann_img_df: pd.DataFrame, 
                      match_img_seg_df: pd.DataFrame, 
@@ -678,7 +725,20 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                     
                 elif curr_info["SegModality"].values[0] == "RTSTRUCT": 
                     seg_partial_path = seg_dicom_info["folder"]
-                    seg_dicom_file = seg_dicom_path / seg_partial_path / "1.dcm" #Assuming all segmentation files are labelled as "1.dcm"
+                    #Check for multiple files within the folder
+                    seg_dicom_folder = seg_dicom_path / seg_partial_path
+                    file_num = len([f for f in seg_dicom_folder.iterdir() if f.is_file()]) #Gets number of files in the folder to see if additional searching for the correct segmentation is necessary.
+                    if file_num > 1: 
+                        #Check each one for the correct segmentation series instance UID. 
+                        seg_dicom_file = find_correct_seg(seg_folder = seg_dicom_folder, seg_seriesInstUID = seg_seriesInstUID)
+                    
+                        if seg_dicom_file == "": #No file match found for the current segmentation (not where it's supposed to be or doesn't exist). Continue to the next potential match.
+                            continue
+
+                    else: 
+                        seg_filename = [f for f in seg_dicom_folder.iterdir()][0] #Get the only filename in that folder
+
+                    seg_dicom_file = seg_dicom_folder / seg_filename
                     seg_refSOPUIDs = get_rtstruct_SOPUIDs(seg_dicom_file)
 
                 else: 
@@ -876,8 +936,11 @@ if __name__ == '__main__':
     dicom_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/.imgtools/images/crawl_db.json"
     ann_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/images/annotations/CPTAC-CCRCC"
     seg_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/"
-    out_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-CCRCC/metadata/annotation_seg_matching"
-    img_out_path = dirs.RESULTS / "TCIA_CPTAC-CCRCC/visualization/annotation_seg_matching"
+    #out_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-CCRCC/metadata/annotation_seg_matching"
+    #img_out_path = dirs.RESULTS / "TCIA_CPTAC-CCRCC/visualization/annotation_seg_matching"
+
+    out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask")
+    img_out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask/plots")
 
     if not out_path.exists():
         Path(out_path).mkdir(parents=True, exist_ok = True)
