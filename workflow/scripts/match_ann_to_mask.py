@@ -8,6 +8,7 @@ import SimpleITK as sitk
 import numpy as np
 import matplotlib.pyplot as plt
 import itertools
+import dpath
 
 from damply import dirs
 from pathlib import Path
@@ -58,6 +59,11 @@ def match_ann_to_image(idx_df: pd.DataFrame):
         dupe_img_seriesID = False #Flag for a duplicate imaging series instance. Needed to check for multiple subseries. 
 
         sr_info = idx_df[(idx_df["Modality"] == "SR") & (idx_df["ReferencedSeriesUID"] == ref_seriesUID)].reset_index(drop = True) #Subset dataframe by the current imaging referenced by the annotation
+
+        if sr_info.empty: 
+            #Some of the SR's have no referenced imaging listed in the index. This is to handle this case and continue to the next SR's info.
+            logger.info("A SR does not have a referenced image ID listed. Please consult the index.csv file.")
+            continue
 
         if sr_info.shape[0] > 1: #Checks if multiple annotations were done on the same image
             logger.info("SR ReferencedSeriesUID for Patient ID: %s has one or more duplicates. Relevant data below:", sr_info["PatientID"].values[0])
@@ -184,9 +190,70 @@ def match_img_to_seg(idx_df: pd.DataFrame,
     
     return matched_img_seg_df
 
-def get_axes_intersection(tum_info_df: pd.DataFrame): 
+def calc_intersection(pair_row: pd.Series): 
     '''
-    Calculates the intersection point between the long axis and short axis tumour measurements. Used to confirm annotation-segmentation matching. 
+    Calculates the intersection point of the long and short axes. 
+
+    Parameters
+    ----------
+    pair_row: pd.Series
+        Contains at least the long and short axis coordinate information 
+    
+    Returns
+    ----------
+    interesection: list
+        The point of intersection between the long and short axes. In the form [x_intersect, y_intersect]
+    '''
+    #Get long and short axis coordinates, defined by two points. Coordinates are listed as [x1, y1, x2, y2]
+    long_ax_coords = pair_row["LongAxisCoords"]
+    short_ax_coords = pair_row["ShortAxisCoords"] 
+    
+    #Create points from the long and short axis coordinate arrays 
+    long_x1y1 = gm.Point(long_ax_coords[0], long_ax_coords[1])
+    long_x2y2 = gm.Point(long_ax_coords[2], long_ax_coords[3])
+    short_x1y1 = gm.Point(short_ax_coords[0], short_ax_coords[1])
+    short_x2y2 = gm.Point(short_ax_coords[2], short_ax_coords[3])
+
+    #Create the long and short axis lines defined by the points above
+    long_axis = gm.Line(long_x1y1, long_x2y2)
+    short_axis = gm.Line(short_x1y1, short_x2y2)
+
+    #Calculate the intersection of the long and short axis measurements. 
+    intersection_info = (long_axis.intersection(short_axis))[0].evalf()
+    intersection = [intersection_info[0], intersection_info[1]]
+    
+    return intersection
+
+def calc_midpoint(measure_row: pd.Series): 
+    '''
+    For measurement information which only has a long axis measurement. Calculates the midpoint of that measurement for 
+    future annotation-segmentation confirmation. 
+
+    Parameters
+    ----------
+    measure_row: pd.Series
+        Contains at least the information for the long axis measurements. No short axis measurements should be listed
+    
+    Returns
+    ----------
+    midpoint: list
+        The midpoint of the long axis measurement in the form [x_midpoint, y_midpoint]
+    '''
+    long_ax_coords = measure_row["LongAxisCoords"] #Get long axis measurement coordinates
+
+    #Create points from the long and short axis coordinate arrays 
+    long_x1y1 = gm.Point(long_ax_coords[0], long_ax_coords[1])
+    long_x2y2 = gm.Point(long_ax_coords[2], long_ax_coords[3]) 
+
+    #Create a segment, which will automatically have the midpoint attribute
+    long_axis_segment = gm.Segment(long_x1y1, long_x2y2)
+    midpoint = [long_axis_segment.midpoint[0], long_axis_segment.midpoint[1]]
+
+    return midpoint
+
+def get_point_of_interest(tum_info_df: pd.DataFrame): 
+    '''
+    Calculates the point of interest (POI) for tumour axis measurements. Used to confirm annotation-segmentation matching. 
     Warning: Edge case with concave polygonal tumours not necessarily covered by this check. 
 
     Parameters
@@ -195,50 +262,262 @@ def get_axes_intersection(tum_info_df: pd.DataFrame):
         Contains the long and short axis measurements, coordinates, and associated annotation information
     Returns
     ----------
-    tum_info_and_intersect_df: pd.DataFrame
-        The same tum_info_df but with an added column named "AnnLongShortIntersection" containing an array representing the interesection point [x,y] 
+    tum_info_and_POI_df: pd.DataFrame
+        The same tum_info_df but with an added column named "AnnPointOfInterest" containing an array representing either the intersection point 
+        of the long and short axis or the midpoint of the long axis [x, y] 
     '''
-
-    axis_intersects = [] #Initialize array to hold the axis intersection point. Will be in the form of [x_intersect, y_intersect]
+    axis_POIs = [] #Initialize array to hold the axis POIs. Will be in the form of [x, y]
     for idx, row in tum_info_df.iterrows(): #Goes through each of the annotation measurements (covers cases where multiple measurements are in the same SR)
-        #Get long and short axis coordinates, defined by two points. Coordinates are listed as [x1, y1, x2, y2]
-        long_ax_coords = row["LongAxisCoords"]
-        short_ax_coords = row["ShortAxisCoords"] 
+        if row["ShortAxisCoords"] is None: 
+            curr_POI = calc_midpoint(row)
+        else: 
+            curr_POI = calc_intersection(row)
         
-        #Create points from the long and short axis coordinate arrays 
-        long_x1y1 = gm.Point(long_ax_coords[0], long_ax_coords[1])
-        long_x2y2 = gm.Point(long_ax_coords[2], long_ax_coords[3])
-        short_x1y1 = gm.Point(short_ax_coords[0], short_ax_coords[1])
-        short_x2y2 = gm.Point(short_ax_coords[2], short_ax_coords[3])
-
-        #Create the long and short axis lines defined by the points above
-        long_axis = gm.Line(long_x1y1, long_x2y2)
-        short_axis = gm.Line(short_x1y1, short_x2y2)
-
-        #Calculate the intersection of the long and short axis measurements. 
-        intersection = (long_axis.intersection(short_axis))[0].evalf()
-        intersect_array = [intersection[0], intersection[1]]
-        
-        axis_intersects.append(intersect_array)
+        axis_POIs.append(curr_POI)
     
     #Add the intersections for each of the measurements into the tumour dataframe. Assumes that order of appended intersection points is the same as looping order. 
-    tum_info_df["AnnLongShortIntersection"] = axis_intersects 
+    tum_info_df["AnnPOI"] = axis_POIs 
     tum_info_and_intersect_df = tum_info_df
 
     return tum_info_and_intersect_df
 
+def check_orthogonal(measure_coord_1: list, 
+                     measure_coord_2: list, 
+                     ortho_tol: float):
+    '''
+    Check to see if two measurements are orthogonal to each other. If they are not, they are not a long and short axis
+    measurement pair.
+
+    Parameters
+    ----------
+    measure_coord_1: list
+        A list of coordinates that define the first line for comparison. In form [x1, y1, x2, y2]
+    measure_coord_2: list 
+        A list of coordinates that define the second line for comparison. In for [x1, y1, x2, y2]
+    ortho_tol: float
+        A tolerance value defining what the acceptible threshold is for the two lines to be considered orthogonal
+    Returns
+    ----------
+    is_ortho: bool 
+        True if the pair is orthogonal. False otherwise. 
+    '''
+    #Get the changes in x and y for both measurements. Used to check for infinite slope and for calculating slope
+    delta_x_1 = measure_coord_1[2] - measure_coord_1[0]
+    delta_x_2 = measure_coord_2[2] - measure_coord_2[0]
+
+    delta_y_1 = measure_coord_1[3] - measure_coord_1[1]
+    delta_y_2 = measure_coord_2[3] - measure_coord_2[1]
+
+    #Check if both lines have infinite slope (are parallel and vertical, very unlikely to happen but handled nonetheless)
+    if (delta_x_1 == 0 and delta_x_2 == 0): 
+        is_ortho = False 
+
+    #Check if one of the lines have infinite slope and if so, check if the other line is horizontal
+    elif delta_x_1 == 0: 
+        slope_2 = delta_y_2 / delta_x_2
+        if abs(slope_2) <= ortho_tol: 
+            is_ortho = True
+        else: 
+            is_ortho = False
+    elif delta_x_2 == 0: 
+        slope_1 = delta_y_1 / delta_x_1
+        if abs(slope_1) <= ortho_tol: 
+            is_ortho = True
+        else: 
+            is_ortho = False
+    
+    #Check if the product of the two slopes are within an interval centered at -1 (product == -1 --> truly orthogonal)
+    else: 
+        slope_1 = delta_y_1 / delta_x_1
+        slope_2 = delta_y_2 / delta_x_2
+
+        slope_product = slope_1 * slope_2
+
+        if slope_product in range(-1 - ortho_tol, -1 + ortho_tol): 
+            is_ortho = True 
+        else: 
+            is_ortho = False
+
+    return is_ortho
+
+def determine_long_short(measurements: list): 
+    '''
+    Based on a list of lists containing measurements and slice IDS, figure out which are on the same slice, if they are 
+    considered orthogonal, and which measurements should be the long and short axis measurements. 
+
+    Parameters
+    ----------
+    measurements: list 
+        Containing RECIST measurements and information on which slice the measurments were taken on. Each list within
+        this list is in the structure [measurement_type, measurement_unit, measurement_length, slice ID, line coordinates]
+    
+    Returns
+    ----------
+    long_axis_info: list
+        Contains all information pertaining to the long axis measurement found. This will be in the order of
+        [long_axis_measure_type, long_axis_measure_unit, long_axis_measurement, long_axis_SOPUID, long_axis_coordinates]
+    short_axis_info: list 
+        Contains all information pertaining to the short axis measurement found (if any). These values are null if no
+        no short axis measurement was found. If found, they will be in the same order as the long axis information list.
+    '''
+
+    #Check length of list. If only one, there is no short axis measurement.
+    num_of_measurements = len(measurements)
+
+    long_axis_info = list()
+    short_axis_info = list()
+
+    if num_of_measurements == 1: 
+        logger.debug("Only one measurement found in this SR.")
+        #Returning here since the itertools combinations won't work with only one entry. 
+        return long_axis_info, short_axis_info
+
+    for measure_a, measure_b in itertools.combinations(measurements, 2):
+        if measure_a[3] == measure_b[3]: #Check if on the same slice. Slice ID info found in 3rd index. 
+            is_orthogonal = check_orthogonal(measure_coords_1 = measure_a[4], 
+                                             measure_coord_2 = measure_b[4],
+                                             ortho_tol = 0.001)
+            if is_orthogonal: 
+                logger.info("Orthogonal pair found for referenced slice: %s.", measure_a[3])
+
+                #Check which measurement is longer to define long and short axis measurements
+                if measure_a[2] > measure_b[2]: 
+                    long_axis_info.append(measure_a)
+                    short_axis_info.append(measure_b)
+                else: 
+                    long_axis_info.append(measure_b)
+                    short_axis_info.append(measure_a)
+
+    if len(long_axis_info) == 0: 
+        logger.debug("No long and short axis pairs found.")
+    
+    return long_axis_info, short_axis_info
+
+def organize_long_short_list(patient_ID: str, 
+                             ann_seriesInstUID: str, 
+                             ref_seriesUID: str, 
+                             column_names: list,
+                             long_axis_measurements: list,
+                             short_axis_measurements: list):
+    '''
+    If long and short axis measurements were not explicitly defined, but pairs were found, organize them in the same format as the 
+    curr_tum_info dataframe in preparation for concatenation. 
+
+    Parameters
+    ----------
+    patient_ID: str
+        The current patient's ID information 
+    ann_seriesInstUID: str
+        The current unique identifier for the annotation
+    ref_seriesUID: str
+        The imaging series ID that the annotation was drawn on
+    column_names: list
+        Contains all of the headers in the same order as the curr_tum_info dataframe
+    long_axis_measurements: list 
+        A list of lists containing the long axis measurement information (type, unit, length, slice ID, coordinates), where the 
+        indices are aligned with the short axis indices' corresponding matches
+    short_axis_measurements: list 
+        A list of lists containing the short axis measurement information (type, unit, length, slice ID, coordinates), where
+        the indices are aligned with the long axis indices' corresponding matches
+
+    Returns
+    ----------
+    tum_info: pd.DataFrame
+        Contains all measurements now labelled as long axis (no short axis measurements) in the same format as curr_tum_info in get_ann_measurements function
+    '''
+    tum_info = pd.DataFrame(columns = column_names)
+
+    for idx in len(long_axis_measurements): 
+        curr_info = [patient_ID, 
+                     ann_seriesInstUID, 
+                     ref_seriesUID, 
+                     long_axis_measurements[idx][0], #Has long axis measurement type 
+                     long_axis_measurements[idx][1], #Has long axis measurement unit
+                     long_axis_measurements[idx][2], #Has long axis measurement length 
+                     long_axis_measurements[idx][3], #Has long axis slice ID
+                     long_axis_measurements[idx][4], #Has long axis measurement coordinates
+                     short_axis_measurements[idx][0], #Has short axis measurement type 
+                     short_axis_measurements[idx][1], #Has short axis measurement unit 
+                     short_axis_measurements[idx][2], #Has short axis measurement length 
+                     short_axis_measurements[idx][3], #Has short axis slice ID 
+                     short_axis_measurements[idx][4] #Has short axis measurement coordinates
+                    ]
+        
+        curr_info_df = pd.DataFrame([curr_info], columns = column_names) #Create dataframe with the current information organized in correct columns
+
+        if tum_info.empty: 
+            tum_info = curr_info_df #If there hasn't been any measurements added before, make the current info the dataframe instead of concatenating
+        else: 
+            tum_info = pd.concat([tum_info, curr_info_df])
+    
+    return tum_info
+
+def organize_long_measures(patient_ID: str, 
+                       ann_seriesInstUID: str, 
+                       ref_seriesUID: str, 
+                       column_names: list,
+                       measurements: list): 
+    '''
+    If there are no long and short axis pairs found, this function will organize the data in the same format as the curr_tum_info dataframe in 
+    preparation for concatenation. 
+
+    Parameters
+    ----------
+    patient_ID: str
+        The current patient's ID information 
+    ann_seriesInstUID: str
+        The current unique identifier for the annotation
+    ref_seriesUID: str
+        The imaging series ID that the annotation was drawn on
+    column_names: list
+        Contains all of the headers in the same order as the curr_tum_info dataframe
+    measurements: list
+        The list of measurements that were not listed as long or short axis to be organized
+
+    Returns
+    ----------
+    tum_info: pd.DataFrame
+        Contains all measurements now labelled as long axis (no short axis measurements) in the same format as curr_tum_info in get_ann_measurements function
+    '''
+
+    tum_info = pd.DataFrame(columns = column_names) #Initialize dataframe with appropriate columns
+
+    for measurement in measurements: 
+        curr_info = [patient_ID, 
+                     ann_seriesInstUID, 
+                     ref_seriesUID, 
+                     measurement[0], #Has measurement type 
+                     measurement[1], #Has measurement unit
+                     measurement[2], #Has measurement length 
+                     measurement[3], #Has slice ID
+                     measurement[4], #Has measurement coordinates
+                     None, 
+                     None, 
+                     None, 
+                     None, 
+                     None]
+        
+        curr_info_df = pd.DataFrame([curr_info], columns = column_names) #Create dataframe with the current information organized in correct columns
+
+        if tum_info.empty: 
+            tum_info = curr_info_df #If there hasn't been any measurements added before, make the current info the dataframe instead of concatenating
+        else: 
+            tum_info = pd.concat([tum_info, curr_info_df])
+    
+    return tum_info
+    
 def get_ann_measurements(ann_dicom_file_path: Path): 
     '''
     Scrapes the raw annotation DICOM file for information relating to long axis measurements. Logs all possible measurements. 
     Assumes all relevant data in the SR follows the same structure and depth and that all measurements correspond to relevant tumours.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     ann_dicom_file_path: Path
         Path to SR file
 
     Returns 
-    ---------
+    ----------
     all_tum_info_df: pd.DataFrame
         Contains information related to file and the long and short axis measurements
     '''
@@ -251,7 +530,7 @@ def get_ann_measurements(ann_dicom_file_path: Path):
             "LongAxisUnit", 
             "LongAxisMeasurement", 
             "LongAxisRefSOPUID", #The slice that the long axis was drawn on
-            "LongAxisCoords", #Coordinates used int he 
+            "LongAxisCoords",  
             "ShortAxisMeasureType", 
             "ShortAxisUnit", 
             "ShortAxisMeasurement", 
@@ -259,8 +538,12 @@ def get_ann_measurements(ann_dicom_file_path: Path):
             "ShortAxisCoords"]
     
     tum_info_df = pd.DataFrame(columns = cols) #Initialize tumour info datarame 
-    dicom_data = pydicom.dcmread(ann_dicom_file_path) #Read in the DICOM data from the SR file
-
+    try:
+        dicom_data = pydicom.dcmread(ann_dicom_file_path) #Read in the DICOM data from the SR file
+    except FileNotFoundError:
+        logger.info("File: %s is was listed in index file but is not in the segmentation subset available on lab server. Skipping.", ann_dicom_file_path)
+        return pd.DataFrame()
+    
     #Access and gather information relevant to the matching process. Logs the process in the corresponding logger file. 
     #For more information on how this DICOM data is structured and why certain indices are accessed, please refer to the devnotes_kaitlyn.md file
     ann_seriesInstUID = dicom_data.SeriesInstanceUID
@@ -270,66 +553,118 @@ def get_ann_measurements(ann_dicom_file_path: Path):
     
     logger.info("Measurements being obtained for file: %s", ann_dicom_file_path)
 
-    for cont_seq in range(len(parent_cont_seq[4]["ContentSequence"].value)): 
-        measure_type_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
-        measure_unit_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["MeasuredValueSequence"][0]["MeasurementUnitsCodeSequence"][0]["CodeValue"].value
-        measurement_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["MeasuredValueSequence"][0]["NumericValue"].value
-        ref_SOPUID_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
-        long_axis_points = []
-        for point_long in range(4): #For (x1, y1) (x2, y2) coordinates to make the long axis
-            point = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][2]["ContentSequence"][0]["GraphicData"][point_long]
-            long_axis_points.append(point)
+    length_measurements = list()
+    cont_sequence1_len = len(parent_cont_seq[4]["ContentSequence"].value)
+    for cont_seq in range(cont_sequence1_len):
+        cont_sequence2_len = len(parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"].value)
+        for cont_seq2 in range(cont_sequence2_len): #This should be redone into a more systematic search for a "long axis" or "short axis" value later.
+            conc_name_code_seq = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
+            if conc_name_code_seq == "Long Axis": 
+                measure_type_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
+                measure_unit_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["MeasuredValueSequence"][0]["MeasurementUnitsCodeSequence"][0]["CodeValue"].value
+                measurement_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["MeasuredValueSequence"][0]["NumericValue"].value
+                ref_SOPUID_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
+                long_axis_points = []
+                for point_long in range(4): #For (x1, y1) (x2, y2) coordinates to make the long axis
+                    point = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["GraphicData"][point_long]
+                    long_axis_points.append(point)
 
-        logger.info("Long axis measurement of type %s and units %s has been obtained.", measure_type_long, measure_unit_long)
-        logger.info("Long axis easurement value: %s", measurement_long)
-        logger.info("Long axis corresponding ReferencedSOPUID: %s", ref_SOPUID_long)
-        logger.info("Long axis coordinates: %s", long_axis_points)
+                logger.info("Long axis measurement of type %s and units %s has been obtained.", measure_type_long, measure_unit_long)
+                logger.info("Long axis easurement value: %s", measurement_long)
+                logger.info("Long axis corresponding ReferencedSOPUID: %s", ref_SOPUID_long)
+                logger.info("Long axis coordinates: %s", long_axis_points)
+            elif conc_name_code_seq == "Short Axis":
+                measure_type_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
+                measure_unit_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["MeasuredValueSequence"][0]["MeasurementUnitsCodeSequence"][0]["CodeValue"].value
+                measurement_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["MeasuredValueSequence"][0]["NumericValue"].value
+                ref_SOPUID_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
+                short_axis_points = []
+                for point_short in range(4): #Same as above but for the short axis instead
+                    point = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["GraphicData"][point_short]
+                    short_axis_points.append(point)
+                
+                logger.info("Short axis measurement of type %s and units %s has been obtained.", measure_type_short, measure_unit_short)
+                logger.info("Short axis measurement value: %s", measurement_short)
+                logger.info("Short axis corresponding ReferencedSOPUID: %s", ref_SOPUID_short)
+                logger.info("Short axis coordinates: %s ", short_axis_points)
 
-        measure_type_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
-        measure_unit_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["MeasuredValueSequence"][0]["MeasurementUnitsCodeSequence"][0]["CodeValue"].value
-        measurement_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["MeasuredValueSequence"][0]["NumericValue"].value
-        ref_SOPUID_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
-        short_axis_points = []
-        for point_short in range(4): #Same as above but for the short axis instead
-            point = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][3]["ContentSequence"][0]["GraphicData"][point_short]
-            short_axis_points.append(point)
+            elif conc_name_code_seq == "Length": #For measurements that are not explicitly defined as an axis measurement. Present in OCTANE data.
+                measure_type = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
+                measure_unit = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["MeasuredValueSequence"][0]["MeasurementUnitsCodeSequence"][0]["CodeValue"].value
+                measurement = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["MeasuredValueSequence"][0]["NumericValue"].value
+                ref_SOPUID = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
+                axis_points = []
+                for pnt in range(4): #Same as above but for ambiguous measurements
+                    point = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["GraphicData"][pnt]
+                    axis_points.append(point)
+                
+                length_info = [measure_type, measure_unit, measurement, ref_SOPUID, axis_points]
+                length_measurements.append(length_info)
+
+        #Check if any measurements were found
+        try:
+            #Check to make sure long and short axis measurements were taken on same slice. 
+            if ref_SOPUID_long != ref_SOPUID_short: 
+                logger.debug("Long and short axis measurements for SeriesInstanceUID %s not taken on the same slice")
+                logger.debug("Long axis RefSOPUID: %s", ref_SOPUID_long)
+                logger.debug("Short axis RefSOPUID: %s", ref_SOPUID_short)
+
+            #Create one row dataframe of current annotation information with the same structure as the overall tumour info to prep it for concatenation. 
+            curr_tum_info = [ann_patientID,
+                            ann_seriesInstUID, 
+                            ann_refSeriesInstUID,
+                            measure_type_long, 
+                            measure_unit_long,
+                            measurement_long, 
+                            ref_SOPUID_long, 
+                            long_axis_points,
+                            measure_type_short,
+                            measure_unit_short,
+                            measurement_short, 
+                            ref_SOPUID_short, 
+                            short_axis_points]
+            
+            curr_tum_df = pd.DataFrame([curr_tum_info], columns = cols)
         
-        logger.info("Short axis measurement of type %s and units %s has been obtained.", measure_type_short, measure_unit_short)
-        logger.info("Short axis measurement value: %s", measurement_short)
-        logger.info("Short axis corresponding ReferencedSOPUID: %s", ref_SOPUID_short)
-        logger.info("Short axis coordinates: %s ", short_axis_points)
+            #Checks if anything has been added to the initial dataframe yet and then concatenates current information with the previously gathered information if applicable. 
+            if tum_info_df.empty: 
+                tum_info_df = curr_tum_df
+            else:
+                tum_info_df = pd.concat([tum_info_df, curr_tum_df])
 
-        #Check to make sure long and short axis measurements were taken on same slice. 
-        if ref_SOPUID_long != ref_SOPUID_short: 
-            logger.debug("Long and short axis measurements for SeriesInstanceUID %s not taken on the same slice")
-            logger.debug("Long axis RefSOPUID: %s", ref_SOPUID_long)
-            logger.debug("Short axis RefSOPUID: %s", ref_SOPUID_short)
+        except NameError: 
+            logger.debug("No long and short axis measurements defined yet. Continuing search for measurements for SeriesInstanceUID: %s", ann_seriesInstUID)
+            continue
 
-        #Create one row dataframe of current annotation information with the same structure as the overall tumour info to prep it for concatenation. 
-        curr_tum_info = [ann_patientID,
-                         ann_seriesInstUID, 
-                         ann_refSeriesInstUID,
-                         measure_type_long, 
-                         measure_unit_long,
-                         measurement_long, 
-                         ref_SOPUID_long, 
-                         long_axis_points,
-                         measure_type_short,
-                         measure_unit_short,
-                         measurement_short, 
-                         ref_SOPUID_short, 
-                         short_axis_points]
-        
-        curr_tum_df = pd.DataFrame([curr_tum_info], columns = cols)
-        
-        #Checks if anything has been added to the initial dataframe yet and then concatenates current information with the previously gathered information if applicable. 
-        if tum_info_df.empty: 
-            tum_info_df = curr_tum_df
-        else:
-            tum_info_df = pd.concat([tum_info_df, curr_tum_df])
+
+    #If you've gotten all measurements, check if any need further definition as long or short axis measurements
+    if (cont_seq == cont_sequence1_len - 1) and (cont_seq2 == cont_sequence2_len - 1):
+        #Check if there were any measurements labelled "Length"
+        if len(length_measurements) > 0: 
+            long_axis_list, short_axis_list = determine_long_short(length_measurements)
+            #If axis pair was found, assign appropriate values to the varaibles of interest
+            if len(long_axis_list) > 0:
+                curr_tum_df = organize_long_short_list(patient_ID = ann_patientID, 
+                                                       ann_seriesInstUID = ann_seriesInstUID,
+                                                       ref_seriesUID = ann_refSeriesInstUID, 
+                                                       column_names = cols, 
+                                                       long_axis_measurements = long_axis_list, 
+                                                       short_axis_measurements = short_axis_list
+                                                       )
+            else: 
+                curr_tum_df = organize_long_measures(patient_ID = ann_patientID, 
+                                                     ann_seriesInstUID = ann_seriesInstUID, 
+                                                     ref_seriesUID = ann_refSeriesInstUID, 
+                                                     column_names = cols, 
+                                                     measurements = length_measurements)
+
+            if tum_info_df.empty: 
+                tum_info_df = curr_tum_df
+            else:
+                tum_info_df = pd.concat([tum_info_df, curr_tum_df])
 
     #Get the intersection point of the long and short axes. To be used to confirm annotation-segmentation match later. 
-    all_tum_info_df = get_axes_intersection(tum_info_df)
+    all_tum_info_df = get_point_of_interest(tum_info_df)
 
     return all_tum_info_df
 
@@ -365,21 +700,21 @@ def get_rtstruct_SOPUIDs(rtstruct_dicom_path: Path):
 
     return rtstruct_SOPUIDs
 
-def compare_niftis(seg_nifti_ser = pd.Series): 
+def compare_niftis(nifti_ser = pd.Series): 
     '''
     Compares segmentation nifti files to see if they contain the same information. 
 
     Parameters
     ----------
-    seg_nifti_ser: pd.Series
-        Contains the segmentation files to compare. 
+    nifti_ser: pd.Series
+        Contains the nifti files to compare. 
     
     Returns
     ----------
     same_segments: bool 
-        Flags whether all the segmentations tested were the same. 
+        Flags whether all the nifti files tested were the same. 
     '''
-    possible_segs = seg_nifti_ser.to_list()
+    possible_segs = nifti_ser.to_list()
     for nifti_a, nifti_b in itertools.combinations(possible_segs, 2): #Iterate over all unique combinations of nifti files 
             #Read in current nifti segmentation pair to compare
             seg_nifti_a = sitk.ReadImage(nifti_a) 
@@ -389,9 +724,9 @@ def compare_niftis(seg_nifti_ser = pd.Series):
             arr_nifti_a = sitk.GetArrayFromImage(seg_nifti_a) 
             arr_nifti_b = sitk.GetArrayFromImage(seg_nifti_b)
 
-            same_segments = np.arary_equal(arr_nifti_a, arr_nifti_b)
+            same_segments = np.array_equal(arr_nifti_a, arr_nifti_b)
             if not same_segments: 
-                logger.debug("Segmentations %s and %s are mapped to the same SeriesInstanceUID but are not the same. Please investigate.", str(nifti_a), str(nifti_b))
+                logger.debug("Nifti files %s and %s are mapped to the same SeriesInstanceUID but are not the same. Please investigate.", str(nifti_a), str(nifti_b))
                 break
     
     return same_segments
@@ -412,7 +747,7 @@ def get_nifti_locs(nifti_idx_path: Path,
     ----------
     img_nifti_path: Path 
         Path to the CT imaging nifti file 
-    seg_nifti_path: Path 
+    seg_nifti_path: pd.Series 
         Path to the associated segmentation nifti file 
     '''
     no_nifti = False #Flag set for testing if the corresponding DICOM files got converted to nifti successfully. 
@@ -440,22 +775,31 @@ def get_nifti_locs(nifti_idx_path: Path,
     if no_nifti: 
         return "", ""
     
-    img_nifti_path = nifti_path / img_nifti.values[0]
+    img_niftis = nifti_path / img_nifti
     seg_niftis = nifti_path / seg_nifti
+
+    #Check for multiple images mapped to the same SeriesInstanceUID 
+    if img_niftis.size > 1: 
+        logger.debug("Multiple images mapped to the same series instance UIDs. Information below:")
+        logger.debug(img_niftis)
+
+        are_dupes = compare_niftis(nifti_ser = img_niftis)
+        if are_dupes:
+            logger.debug("Image niftis listed below are the same: ")
+            logger.debug(img_niftis)
+            img_niftis = pd.Series(data = img_niftis.iloc[0])
 
     #Check for multiple segmentation niftis mapped to the same SeriesInstanceUID 
     if seg_niftis.size > 1: 
         #Want to see if the files listed are just duplicates or if two segmentations got mapped to the same SeriesInstanceUID 
-        are_dupes = compare_niftis(seg_nifti_ser = seg_niftis)
-        if not are_dupes: 
-            return "", "" #Cannot discern match from just the SeriesInstanceUID, which requires further investigation. Skips and considers it a no match for now. 
-        else: 
-            seg_nifti_path = seg_niftis.iloc[0] #If all the files are the same, just pick the first one
-    else: 
-        seg_nifti_path = seg_niftis.iloc[0] #If there is only one file (because the empty case is already taken care of), get that path 
-
+        are_dupes = compare_niftis(nifti_ser = seg_niftis)
+        if are_dupes: 
+            # seg_nifti_path = seg_niftis.iloc[0] #If all the files are the same, just pick the first one
+            logger.debug("Segmentations listed below are the same: ")
+            logger.debug(seg_niftis)
+            seg_niftis = pd.Series(data = seg_niftis.iloc[0])
     
-    return img_nifti_path, seg_nifti_path 
+    return img_niftis, seg_niftis
 
 def get_slice_num(inst_slice: str, 
                   num_of_slices: int): 
@@ -505,10 +849,13 @@ def plot_img_seg_ann(tum_info: pd.Series,
     plt.plot([tum_info["LongAxisCoords"][0], tum_info["LongAxisCoords"][2]], 
                [tum_info["LongAxisCoords"][1], tum_info["LongAxisCoords"][3]], 
                'ro-', markersize = 2, linewidth = 1) #Plots the long axis line in red.
-    plt.plot([tum_info["ShortAxisCoords"][0], tum_info["ShortAxisCoords"][2]], 
-             [tum_info["ShortAxisCoords"][1], tum_info["ShortAxisCoords"][3]], 
-             'bo-', markersize = 2, linewidth = 1) #Plots the short axis line in blue.
-    plt.plot(tum_info["AnnLongShortIntersection"][0], tum_info["AnnLongShortIntersection"][1], 
+    
+    if tum_info["ShortAxisCoords"] is not None: #If there was a short axis match to the long axis measurement, plot it
+        plt.plot([tum_info["ShortAxisCoords"][0], tum_info["ShortAxisCoords"][2]], 
+                [tum_info["ShortAxisCoords"][1], tum_info["ShortAxisCoords"][3]], 
+                'bo-', markersize = 2, linewidth = 1) #Plots the short axis line in blue.
+        
+    plt.plot(tum_info["AnnPOI"][0], tum_info["AnnPOI"][1], 
              'yo', markersize = 2) #Plots the intersection of the short and long axis by a yellow dot. 
     plt.text(2, -5, "RefSOPUID: " + tum_info["LongAxisRefSOPUID"], fontsize=6) #Put the slice ID so it can differentiate from different annotations
 
@@ -595,7 +942,7 @@ def confirm_ann_seg_match(tum_info_df: pd.DataFrame,
         seg_slice = seg_arr[slice_num]
         np_seg_slice = np_seg_arr[slice_num]
 
-        is_in_seg = seg_slice[round(row["AnnLongShortIntersection"][1])][round(row["AnnLongShortIntersection"][0])]
+        is_in_seg = seg_slice[round(row["AnnPOI"][1])][round(row["AnnPOI"][0])]
 
         if is_in_seg: 
             plot_img_seg_ann(row, img_slice, np_seg_slice, overlay_out_path)
@@ -689,7 +1036,7 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
             "AnnShortAxisMeasureType", 
             "AnnShortAxisMeasureUnit",
             "AnnShortAxisCoordinates", 
-            "AnnLongShortIntersection", 
+            "AnnPOI", 
             "ImgModality", 
             "AnnModality", 
             "SegModality", 
@@ -721,6 +1068,8 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
         
         ann_file_path = ann_seg_dicom_path / img_ann_info["AnnLocation"].iloc[0] / filename
         tum_measurements = get_ann_measurements(ann_file_path)
+        if tum_measurements.empty:
+            continue #If entering this check, this means that the annotation DICOM file is currently unavailable
         
         ann_refSeriesUID = ann_dicom_info["ReferencedSeriesUID"]
         
@@ -729,6 +1078,8 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
             if curr_measurements.shape[0] > 1: 
                 logger.debug("Multiple long axis measurements on the same slice")
             
+            #Check to see these measurements and coordinates have already been checked though (handles annotation duplicates)
+
             #Handling duplicate imaging SeriesInstanceUIDs (for ones with multiple SubSeries) 
             if img_ann_info["ImgSubSeries"].values[0] == "N/A": 
                 logger.info("Finding correct imaging subseries.")
@@ -772,8 +1123,8 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
 
                     else: 
                         seg_filename = [f for f in seg_dicom_folder.iterdir()][0] #Get the only filename in that folder
-
-                    seg_dicom_file = seg_dicom_folder / seg_filename
+                        seg_dicom_file = seg_dicom_folder / seg_filename
+                    
                     seg_refSOPUIDs = get_rtstruct_SOPUIDs(seg_dicom_file)
 
                 else: 
@@ -803,7 +1154,7 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                             curr_measurements["ShortAxisMeasureType"].values[0], 
                             curr_measurements["ShortAxisUnit"].values[0],
                             curr_measurements["ShortAxisCoords"].values[0],
-                            curr_measurements["AnnLongShortIntersection"].values[0],
+                            curr_measurements["AnnPOI"].values[0],
                             img_ann_info["ImgModality"].values[0], 
                             ann_dicom_info["Modality"], 
                             seg_dicom_info["Modality"],
@@ -823,18 +1174,59 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
             for seg_match in potential_seg_matches: 
                 curr_seg_info = match_img_seg_df[match_img_seg_df["SegSeriesInstanceUID"] == seg_match]
 
-                img_loc, seg_loc = get_nifti_locs(nifti_idx_path, curr_seg_info)
-                for idx, measurement in curr_measurements.iterrows():
-                    measurement_df = pd.DataFrame(measurement).transpose()
-                    is_in_seg = confirm_ann_seg_match(measurement_df, img_loc, seg_loc, dicom_info_dict, img_subseries, img_out_path)
-                    if is_in_seg: 
-                        matched_info = [ann_dicom_info["PatientID"], 
+                img_locs, seg_locs = get_nifti_locs(nifti_idx_path, curr_seg_info)
+
+                #Have to enter this loop since there are scenarios where the nifti files got converted to be mapped to the same
+                #segmentation series instance UIDs 
+                for i in range(len(seg_locs)): 
+                    for j in range(len(img_locs)):
+                        seg_loc = seg_locs.iloc[i]
+                        img_loc = img_locs.iloc[j]
+                        for idx, measurement in curr_measurements.iterrows():
+                            measurement_df = pd.DataFrame(measurement).transpose()
+                            is_in_seg = confirm_ann_seg_match(measurement_df, img_loc, seg_loc, dicom_info_dict, img_subseries, img_out_path)
+                            if is_in_seg: 
+                                matched_info = [ann_dicom_info["PatientID"], 
+                                                ann_dicom_info["StudyInstanceUID"], 
+                                                img_ann_info["ImgSeriesInstanceUID"].values[0], 
+                                                ann_refSeriesUID,  
+                                                seg_dicom_info["ReferencedSeriesUID"], #Assumes that all potential seg matches have the same ref image
+                                                ann_dicom_info["SeriesInstanceUID"], 
+                                                seg_match,
+                                                refSOPUID, 
+                                                measurement_df["LongAxisMeasurement"].values[0],
+                                                measurement_df["LongAxisMeasureType"].values[0], 
+                                                measurement_df["LongAxisUnit"].values[0],
+                                                measurement_df["LongAxisCoords"].values[0],
+                                                measurement_df["ShortAxisMeasurement"].values[0], 
+                                                measurement_df["ShortAxisMeasureType"].values[0], 
+                                                measurement_df["ShortAxisUnit"].values[0],
+                                                measurement_df["ShortAxisCoords"].values[0], 
+                                                measurement_df["AnnPOI"].values[0],
+                                                img_ann_info["ImgModality"].values[0], 
+                                                ann_dicom_info["Modality"], 
+                                                seg_dicom_info["Modality"],
+                                                img_subseries, 
+                                                img_ann_info["ImgLocation"].values[0], 
+                                                img_ann_info["AnnLocation"].values[0],
+                                                filename,
+                                                curr_seg_info["SegLocation"].values[0]
+                                            ]
+                    
+                                match_info_df = pd.DataFrame([matched_info], columns = cols)
+                                if match_info_summary.empty:
+                                    match_info_summary = match_info_df
+                                else:
+                                    match_info_summary = pd.concat([match_info_summary, match_info_df])
+
+                            else: 
+                                no_matched_info = [ann_dicom_info["PatientID"], 
                                         ann_dicom_info["StudyInstanceUID"], 
                                         img_ann_info["ImgSeriesInstanceUID"].values[0], 
                                         ann_refSeriesUID,  
                                         seg_dicom_info["ReferencedSeriesUID"], #Assumes that all potential seg matches have the same ref image
                                         ann_dicom_info["SeriesInstanceUID"], 
-                                        seg_match,
+                                        potential_seg_matches, 
                                         refSOPUID, 
                                         measurement_df["LongAxisMeasurement"].values[0],
                                         measurement_df["LongAxisMeasureType"].values[0], 
@@ -844,7 +1236,7 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                                         measurement_df["ShortAxisMeasureType"].values[0], 
                                         measurement_df["ShortAxisUnit"].values[0],
                                         measurement_df["ShortAxisCoords"].values[0], 
-                                        measurement_df["AnnLongShortIntersection"].values[0],
+                                        measurement_df["AnnPOI"].values[0],
                                         img_ann_info["ImgModality"].values[0], 
                                         ann_dicom_info["Modality"], 
                                         seg_dicom_info["Modality"],
@@ -852,48 +1244,14 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                                         img_ann_info["ImgLocation"].values[0], 
                                         img_ann_info["AnnLocation"].values[0],
                                         filename,
-                                        curr_seg_info["SegLocation"].values[0]
-                                    ]
-            
-                        match_info_df = pd.DataFrame([matched_info], columns = cols)
-                        if match_info_summary.empty:
-                            match_info_summary = match_info_df
-                        else:
-                            match_info_summary = pd.concat([match_info_summary, match_info_df])
+                                        None]
+                            
+                                no_match_df = pd.DataFrame([no_matched_info], columns = cols)
 
-                    else: 
-                        no_matched_info = [ann_dicom_info["PatientID"], 
-                                ann_dicom_info["StudyInstanceUID"], 
-                                img_ann_info["ImgSeriesInstanceUID"].values[0], 
-                                ann_refSeriesUID,  
-                                seg_dicom_info["ReferencedSeriesUID"], #Assumes that all potential seg matches have the same ref image
-                                ann_dicom_info["SeriesInstanceUID"], 
-                                potential_seg_matches, 
-                                refSOPUID, 
-                                measurement_df["LongAxisMeasurement"].values[0],
-                                measurement_df["LongAxisMeasureType"].values[0], 
-                                measurement_df["LongAxisUnit"].values[0],
-                                measurement_df["LongAxisCoords"].values[0],
-                                measurement_df["ShortAxisMeasurement"].values[0], 
-                                measurement_df["ShortAxisMeasureType"].values[0], 
-                                measurement_df["ShortAxisUnit"].values[0],
-                                measurement_df["ShortAxisCoords"].values[0], 
-                                measurement_df["AnnLongShortIntersection"].values[0],
-                                img_ann_info["ImgModality"].values[0], 
-                                ann_dicom_info["Modality"], 
-                                seg_dicom_info["Modality"],
-                                img_subseries, 
-                                img_ann_info["ImgLocation"].values[0], 
-                                img_ann_info["AnnLocation"].values[0],
-                                filename,
-                                None]
-                    
-                        no_match_df = pd.DataFrame([no_matched_info], columns = cols)
-
-                        if no_match_info_summary.empty: 
-                            no_match_info_summary = no_match_df
-                        else: 
-                            no_match_info_summary = pd.concat([no_match_info_summary, no_match_df])
+                                if no_match_info_summary.empty: 
+                                    no_match_info_summary = no_match_df
+                                else: 
+                                    no_match_info_summary = pd.concat([no_match_info_summary, no_match_df])
 
     return match_info_summary, no_match_info_summary
 
@@ -962,17 +1320,17 @@ def run_matching(idx_dicom_file: str,
     
 if __name__ == '__main__': 
     logger = logging.getLogger(__name__)
-    logging.basicConfig(filename='/home/bhkuser/bhklab/kaitlyn/aaura_paper0/logs/match_no_match_ann_img_seg.log', encoding='utf-8', level=logging.DEBUG)
+    logging.basicConfig(filename = dirs.LOGS / "match_no_match_ann_img_seg_OCTANE.log", encoding='utf-8', level=logging.DEBUG)
     
-    idx_dicom_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/.imgtools/images/index.csv"
-    idx_nifti_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-CCRCC/images/mit_CPTAC-CCRCC/mit_CPTAC-CCRCC_index.csv"
-    dicom_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/.imgtools/images/crawl_db.json"
-    ann_seg_data_path = dirs.RAWDATA / "Abdomen/TCIA_CPTAC-CCRCC/"
-    #out_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-CCRCC/metadata/annotation_seg_matching"
-    #img_out_path = dirs.RESULTS / "TCIA_CPTAC-CCRCC/visualization/annotation_seg_matching"
+    idx_dicom_path = dirs.RAWDATA / "PMCC_OCTANE/.imgtools/images/index.csv"
+    idx_nifti_path = dirs.PROCDATA / "PMCC_OCTANE/images/mit_OCTANE/mit_OCTANE_index.csv"
+    dicom_data_path = dirs.RAWDATA / "PMCC_OCTANE/.imgtools/images/crawl_db.json"
+    ann_seg_data_path = dirs.RAWDATA / "PMCC_OCTANE"
+    out_path = dirs.PROCDATA / "PMCC_OCTANE/metadata/annotation_seg_matching"
+    img_out_path = dirs.RESULTS / "PMCC_OCTANE/visualization/annotation_seg_matching"
 
-    out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask")
-    img_out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask/plots")
+    # out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask")
+    # img_out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask/plots")
 
     if not out_path.exists():
         Path(out_path).mkdir(parents=True, exist_ok = True)
