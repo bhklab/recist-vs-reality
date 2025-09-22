@@ -8,7 +8,6 @@ import SimpleITK as sitk
 import numpy as np
 import matplotlib.pyplot as plt
 import itertools
-import dpath
 
 from damply import dirs
 from pathlib import Path
@@ -566,7 +565,8 @@ def get_ann_measurements(ann_dicom_file_path: Path):
                 ref_SOPUID_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
                 long_axis_points = []
                 for point_long in range(4): #For (x1, y1) (x2, y2) coordinates to make the long axis
-                    point = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["GraphicData"][point_long]
+                    #Rounding because of conversion errors causing duplicate annotations not to be detected. 
+                    point = round(parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["GraphicData"][point_long], 2)
                     long_axis_points.append(point)
 
                 logger.info("Long axis measurement of type %s and units %s has been obtained.", measure_type_long, measure_unit_long)
@@ -580,7 +580,8 @@ def get_ann_measurements(ann_dicom_file_path: Path):
                 ref_SOPUID_short = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
                 short_axis_points = []
                 for point_short in range(4): #Same as above but for the short axis instead
-                    point = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["GraphicData"][point_short]
+                    #Rounding because of conversion errors causing duplicate annotations not to be detected. 
+                    point = round(parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["GraphicData"][point_short], 2)
                     short_axis_points.append(point)
                 
                 logger.info("Short axis measurement of type %s and units %s has been obtained.", measure_type_short, measure_unit_short)
@@ -595,7 +596,8 @@ def get_ann_measurements(ann_dicom_file_path: Path):
                 ref_SOPUID = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["ContentSequence"][0]["ReferencedSOPSequence"][0]["ReferencedSOPInstanceUID"].value
                 axis_points = []
                 for pnt in range(4): #Same as above but for ambiguous measurements
-                    point = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["GraphicData"][pnt]
+                    #Rounding because of conversion errors causing duplicate annotations not to be detected. 
+                    point = round(parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ContentSequence"][0]["GraphicData"][pnt], 2)
                     axis_points.append(point)
                 
                 length_info = [measure_type, measure_unit, measurement, ref_SOPUID, axis_points]
@@ -716,20 +718,40 @@ def compare_niftis(nifti_ser = pd.Series):
     '''
     possible_segs = nifti_ser.to_list()
     for nifti_a, nifti_b in itertools.combinations(possible_segs, 2): #Iterate over all unique combinations of nifti files 
-            #Read in current nifti segmentation pair to compare
-            seg_nifti_a = sitk.ReadImage(nifti_a) 
-            seg_nifti_b = sitk.ReadImage(nifti_b)
+        seg_nifti_a = sitk.ReadImage(nifti_a) 
+        seg_nifti_b = sitk.ReadImage(nifti_b)
 
-            #Convert segmentations to arrays for comparison 
-            arr_nifti_a = sitk.GetArrayFromImage(seg_nifti_a) 
-            arr_nifti_b = sitk.GetArrayFromImage(seg_nifti_b)
+        #Convert segmentations to arrays for comparison 
+        arr_nifti_a = sitk.GetArrayFromImage(seg_nifti_a) 
+        arr_nifti_b = sitk.GetArrayFromImage(seg_nifti_b)
 
-            same_segments = np.array_equal(arr_nifti_a, arr_nifti_b)
-            if not same_segments: 
-                logger.debug("Nifti files %s and %s are mapped to the same SeriesInstanceUID but are not the same. Please investigate.", str(nifti_a), str(nifti_b))
-                break
+        same_segments = np.array_equal(arr_nifti_a, arr_nifti_b)
+        if not same_segments: 
+            logger.debug("Nifti files %s and %s are mapped to the same SeriesInstanceUID but are not the same. Please investigate.", str(nifti_a), str(nifti_b))
+            break
     
     return same_segments
+
+def check_nifti_exists(nifti_series: pd.Series): 
+    '''
+    For file paths in a series, check if they exist and can be found. 
+
+    Parameters
+    ----------
+    nifti_series: pd.Series
+        Contains all file paths in Path form that are going to be checked
+    
+    Returns
+    ----------
+    exist_niftis: pd.Series
+        Contains only the paths that are accessible 
+    '''
+    exist_niftis = pd.Series()
+    for path in nifti_series: 
+        if path.is_file(): 
+            exist_niftis = pd.concat([exist_niftis, pd.Series(data = path)])
+    
+    return exist_niftis
 
 def get_nifti_locs(nifti_idx_path: Path, 
                    img_seg_info: pd.DataFrame): 
@@ -764,19 +786,23 @@ def get_nifti_locs(nifti_idx_path: Path,
 
     #Check if the matching was successful. If there is either a missing imaging or segmentation nifti conversion, raise flag.
     if img_nifti.empty: 
-        logger.info("Imaging SeriesInstanceUID: %s does not have a matching nifti file.")
+        logger.info("Imaging SeriesInstanceUID: %s does not have a matching nifti file.", img_instUID)
         no_nifti = True
     elif seg_nifti.empty: 
-        logger.info("Segmentation SeriesInstanceUID: %s does not have a matching nifti file.")
+        logger.info("Segmentation SeriesInstanceUID: %s does not have a matching nifti file.", seg_instUID)
         no_nifti = True
     
-    #If there isn't a match, return blank strings for both. 
-    #Using the blank strings so I can do an equality comparison of path variables in the annotation-segmentation confirmation and return a no match if both variables are blank. 
+    #If there isn't a match, return empty series for both. 
+    #Using the empty series so I can do an equality comparison of path variables in the annotation-segmentation confirmation and return a no match if both variables are blank. 
     if no_nifti: 
-        return "", ""
+        return pd.Series(), pd.Series()
     
     img_niftis = nifti_path / img_nifti
     seg_niftis = nifti_path / seg_nifti
+
+    #Test to see if the nifti files mentioned are accessible 
+    img_niftis = check_nifti_exists(img_niftis)
+    seg_niftis = check_nifti_exists(seg_niftis)
 
     #Check for multiple images mapped to the same SeriesInstanceUID 
     if img_niftis.size > 1: 
@@ -900,11 +926,7 @@ def confirm_ann_seg_match(tum_info_df: pd.DataFrame,
     ---------
     is_in_seg: bool 
         Returns 0 if intersection is not in the segmentation and 1 if it is
-    '''
-    #Checks if there was an available nifti file for the listed pair. If not, return that there is no match available. 
-    if img_nifti_path == "" and seg_nifti_path == "": 
-        return 0 
-    
+    '''    
     #Read in the image and segmentation nifti files
     img_nifti = sitk.ReadImage(img_nifti_path) 
     seg_nifti = sitk.ReadImage(seg_nifti_path)
@@ -1077,8 +1099,6 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
             curr_measurements = tum_measurements[tum_measurements["LongAxisRefSOPUID"] == refSOPUID]
             if curr_measurements.shape[0] > 1: 
                 logger.debug("Multiple long axis measurements on the same slice")
-            
-            #Check to see these measurements and coordinates have already been checked though (handles annotation duplicates)
 
             #Handling duplicate imaging SeriesInstanceUIDs (for ones with multiple SubSeries) 
             if img_ann_info["ImgSubSeries"].values[0] == "N/A": 
@@ -1178,12 +1198,65 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
 
                 #Have to enter this loop since there are scenarios where the nifti files got converted to be mapped to the same
                 #segmentation series instance UIDs 
-                for i in range(len(seg_locs)): 
-                    for j in range(len(img_locs)):
-                        seg_loc = seg_locs.iloc[i]
-                        img_loc = img_locs.iloc[j]
-                        for idx, measurement in curr_measurements.iterrows():
-                            measurement_df = pd.DataFrame(measurement).transpose()
+                for idx, measurement in curr_measurements.iterrows():
+                    #Check to see if these coordinates have already been checked though for this patient (handles annotation duplicates)
+                    if not match_info_summary.empty: 
+                        in_matches = curr_measurements["LongAxisCoords"].values[0] in match_info_summary["AnnLongAxisCoordinates"].values.tolist() and curr_measurements["AnnPatientID"].values[0] in match_info_summary["PatientID"].values.tolist()
+                        if in_matches: 
+                            #A duplicate measurement was found. Going to skip this measurement for this slice. 
+                            logger.info("Annotation series instance UID: %s measurement for patient %s is a duplicate of an annotation which has already been matched.", ann_seriesInstUID, curr_measurements["AnnPatientID"].values[0])
+                            logger.info("Long axis coordiantes duplicated: %s", curr_measurements["LongAxisCoords"].values[0])
+                            continue 
+
+                    if not no_match_info_summary.empty: 
+                        in_no_matches = curr_measurements["LongAxisCoords"].values[0] in no_match_info_summary["AnnLongAxisCoordinates"].values.tolist() and curr_measurements["AnnPatientID"].values[0] in no_match_info_summary["PatientID"].values.tolist()
+                        if in_no_matches: 
+                            #A duplicate measurement was found. Going to skip this measurement for this slice. 
+                            logger.info("Annotation series instance UID: %s measurement for patient %s is a duplicate of an annotation already searched through and determined to have no match.", ann_seriesInstUID, curr_measurements["AnnPatientID"].values[0])
+                            logger.info("Long axis coordiantes duplicated: %s", curr_measurements["LongAxisCoords"].values[0])
+                            continue 
+                        
+                    measurement_df = pd.DataFrame(measurement).transpose()
+                    if img_locs.empty or seg_locs.empty: 
+                        #If there was no matching nifti files, count as a no match
+                        no_matched_info = [ann_dicom_info["PatientID"], 
+                                        ann_dicom_info["StudyInstanceUID"], 
+                                        img_ann_info["ImgSeriesInstanceUID"].values[0], 
+                                        ann_refSeriesUID,  
+                                        seg_dicom_info["ReferencedSeriesUID"], #Assumes that all potential seg matches have the same ref image
+                                        ann_dicom_info["SeriesInstanceUID"], 
+                                        potential_seg_matches, 
+                                        refSOPUID, 
+                                        measurement_df["LongAxisMeasurement"].values[0],
+                                        measurement_df["LongAxisMeasureType"].values[0], 
+                                        measurement_df["LongAxisUnit"].values[0],
+                                        measurement_df["LongAxisCoords"].values[0],
+                                        measurement_df["ShortAxisMeasurement"].values[0], 
+                                        measurement_df["ShortAxisMeasureType"].values[0], 
+                                        measurement_df["ShortAxisUnit"].values[0],
+                                        measurement_df["ShortAxisCoords"].values[0], 
+                                        measurement_df["AnnPOI"].values[0],
+                                        img_ann_info["ImgModality"].values[0], 
+                                        ann_dicom_info["Modality"], 
+                                        seg_dicom_info["Modality"],
+                                        img_subseries, 
+                                        img_ann_info["ImgLocation"].values[0], 
+                                        img_ann_info["AnnLocation"].values[0],
+                                        filename,
+                                        None]
+                            
+                        no_match_df = pd.DataFrame([no_matched_info], columns = cols)
+
+                        if no_match_info_summary.empty: 
+                            no_match_info_summary = no_match_df
+                        else: 
+                            no_match_info_summary = pd.concat([no_match_info_summary, no_match_df])
+                        continue 
+
+                    for i in range(len(seg_locs)): 
+                        for j in range(len(img_locs)):
+                            seg_loc = seg_locs.iloc[i]
+                            img_loc = img_locs.iloc[j]
                             is_in_seg = confirm_ann_seg_match(measurement_df, img_loc, seg_loc, dicom_info_dict, img_subseries, img_out_path)
                             if is_in_seg: 
                                 matched_info = [ann_dicom_info["PatientID"], 
