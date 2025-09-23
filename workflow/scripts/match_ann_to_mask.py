@@ -1066,7 +1066,9 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
             "ImgLocation", 
             "AnnLocation",
             "AnnFilename", 
-            "SegLocation"       
+            "SegLocation", 
+            "ImgNIFTILocation", 
+            "SegNIFTILocation"       
            ]
     
     match_info_summary = pd.DataFrame(columns = cols) 
@@ -1182,6 +1184,8 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                             img_ann_info["ImgLocation"].values[0], 
                             img_ann_info["AnnLocation"].values[0],
                             filename,
+                            None,
+                            None, 
                             None]
                 
                 no_match_df = pd.DataFrame([no_matched_info], columns = cols)
@@ -1243,6 +1247,8 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                                         img_ann_info["ImgLocation"].values[0], 
                                         img_ann_info["AnnLocation"].values[0],
                                         filename,
+                                        None,
+                                        None,
                                         None]
                             
                         no_match_df = pd.DataFrame([no_matched_info], columns = cols)
@@ -1283,7 +1289,9 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                                                 img_ann_info["ImgLocation"].values[0], 
                                                 img_ann_info["AnnLocation"].values[0],
                                                 filename,
-                                                curr_seg_info["SegLocation"].values[0]
+                                                curr_seg_info["SegLocation"].values[0],
+                                                j, #Image NIFTI path
+                                                i  #Segmentation NIFTI path
                                             ]
                     
                                 match_info_df = pd.DataFrame([matched_info], columns = cols)
@@ -1317,6 +1325,8 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                                         img_ann_info["ImgLocation"].values[0], 
                                         img_ann_info["AnnLocation"].values[0],
                                         filename,
+                                        None,
+                                        None,
                                         None]
                             
                                 no_match_df = pd.DataFrame([no_matched_info], columns = cols)
