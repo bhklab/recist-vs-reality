@@ -1290,8 +1290,8 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                                                 img_ann_info["AnnLocation"].values[0],
                                                 filename,
                                                 curr_seg_info["SegLocation"].values[0],
-                                                j, #Image NIFTI path
-                                                i  #Segmentation NIFTI path
+                                                img_loc, #Image NIFTI path
+                                                seg_loc  #Segmentation NIFTI path
                                             ]
                     
                                 match_info_df = pd.DataFrame([matched_info], columns = cols)
