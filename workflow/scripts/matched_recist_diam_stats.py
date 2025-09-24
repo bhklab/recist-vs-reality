@@ -6,54 +6,6 @@ from scipy import stats
 from pathlib import Path 
 from damply import dirs
 
-def get_nifti_locs(nifti_idx_path: Path, 
-                   img_seg_info: pd.DataFrame): 
-    '''
-    Gets the file locations of the nifti files for CT image and associated segmentation. 
-    
-    Parameters
-    ----------
-    nifti_idx_path: Path
-        Path to index file created by med-imagetools for the nifti versions of the CT and segmentation files  
-    img_seg_info: pd.DataFrame 
-        A one-row dataframe containing the current image and segmentation information
-
-    Returns 
-    ----------
-    img_nifti_path: Path 
-        Path to the CT imaging nifti file 
-    seg_nifti_path: Path 
-        Path to the associated segmentation nifti file 
-    '''
-    no_nifti = False
-    nifti_path = Path("/".join(str(nifti_idx_path).split("/")[:-1]))
-    nifti_idx_df = pd.read_csv(nifti_idx_path)
-
-    img_instUID = img_seg_info["ImgSeriesInstanceUID"].values[0]
-    seg_instUID = img_seg_info["SegSeriesInstanceUID"].values[0]
-
-    img_nifti = nifti_idx_df[nifti_idx_df["SeriesInstanceUID"] == img_instUID]["filepath"]
-    seg_nifti = nifti_idx_df[nifti_idx_df["SeriesInstanceUID"] == seg_instUID]["filepath"]
-
-    if img_nifti.empty: 
-        logger.info("Imaging SeriesInstanceUID: %s does not have a matching nifti file.")
-        no_nifti = True
-    elif seg_nifti.empty: 
-        logger.info("Segmentation SeriesInstanceUID: %s does not have a matching nifti file.")
-        no_nifti = True
-
-    if no_nifti: 
-        return "", ""
-    img_nifti_path = nifti_path / img_nifti.values[0]
-    seg_niftis = nifti_path / seg_nifti
-
-    for row in seg_niftis.items(): 
-        path = str(row[1])
-        if "GTV" in path: 
-            seg_nifti_path = Path(path)
-    
-    return img_nifti_path, seg_nifti_path 
-
 def match_pyrad_to_ann_seg(nifti_file_path: Path, 
                            pyrad_data: pd.DataFrame, 
                            ann_seg_match_data: pd.DataFrame): 
@@ -89,22 +41,8 @@ def match_pyrad_to_ann_seg(nifti_file_path: Path,
             #This shouldn't happen for the datasets processed so far (CCRCC, NSCLC-Radiogenomics, PDA)
             logger.debug("Current matched row has more than one segmentation for this tumour.") 
         
-        _, seg_nifti_path = get_nifti_locs(nifti_file_path, curr_matched)
-
-        #Get folder name of where the nifti files are located
-        #This should be the start of the nifti segmentation path listed in the PyRadiomics feature .csv under the header "Mask"
-        #Can be removed later if NSCLC-Radiogenomics nifti paths match
-        nifti_folder = str(nifti_file_path).split("/")[-2]
-
-        if "NSCLC-Radiogenomics" in nifti_folder: 
-            #Additional processing of path since the features were extracted on a previous (but equivalent) nifti file
-            #of a different name
-            #Should be removed later if the features ever get re-extracted and the file paths reflect the current 
-            #nifti files in the dataset folder
-            seg_nifti_path = "/".join(str(seg_nifti_path).split("/")[-4:-1]) / "GTV.nii.gz"
-        else: 
-            #Get path that will match form of the PyRadiomics "Mask" path in the feature file
-            seg_nifti_path = "/".join(str(seg_nifti_path).split("/")[-4:])
+        seg_nifti_full_path = curr_matched["SegNIFTILocation"].values[0]
+        seg_nifti_path = "/".join(seg_nifti_full_path.split("/")[-4:])
         
         #Check if the current segmentation was used in feature extraction. If so, match it with the appropriate annotation,
         #imaging, and segmentation data for further processing
@@ -177,15 +115,17 @@ def calc_ttest_stats(ann_seg_pyrad_df: pd.DataFrame,
     return ann_pyrad_stats
 
 if __name__ == '__main__': 
-    dataset = "TCIA_CPTAC-PDA" #Only used to help distinguish between log files currently
+    dataset = "TCIA_CPTAC-CCRCC" 
+    dataset_short = dataset.split("_")[-1]
+    area = "Abdomen"
 
     logger = logging.getLogger(__name__)
     logging.basicConfig(filename=dirs.LOGS / (dataset + "_recist_diam_stats.log"), encoding='utf-8', level=logging.DEBUG)
 
-    nifti_idx_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-PDA/images/mit_CPTAC-PDA/mit_CPTAC-PDA_index.csv"
-    pyrad_measure_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-PDA/features/rvr_measurements/pyradiomics_measurement_subset_axislen.csv"
-    matched_data_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-PDA/metadata/annotation_seg_matching/matching_ann_to_seg.csv"
-    out_path = dirs.PROCDATA / "Abdomen/TCIA_CPTAC-PDA/metadata/recist_diameter_stats"
+    nifti_idx_path = dirs.PROCDATA / area / dataset / Path("images/mit_" + dataset_short) / Path("mit_" + dataset_short + "_index.csv")
+    pyrad_measure_path = dirs.PROCDATA / area / dataset / Path("features/rvr_measurements/pyradiomics_measurement_subset_axislen.csv")
+    matched_data_path = dirs.PROCDATA / area / dataset / Path("metadata/annotation_seg_matching/matching_ann_to_seg.csv")
+    out_path = dirs.PROCDATA / area / dataset / Path("metadata/recist_diameter_stats")
 
     pyrad_df = pd.read_csv(pyrad_measure_path) 
     matched_data_df = pd.read_csv(matched_data_path)
@@ -207,6 +147,10 @@ if __name__ == '__main__':
                                               feat_names = feature_names, 
                                               epsilons = eps)
     
+    if not out_path.exists(): 
+        Path(out_path).mkdir(parents = True, exist_ok = True)
+    
     annotation_pyrad_stats.to_csv(out_path / "recist_vs_diameter_stats.csv")
+    match_pyrad_ann_df.to_csv(out_path / "matched_pyradiomics_annotations.csv")
 
 
