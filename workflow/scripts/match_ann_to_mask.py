@@ -1402,15 +1402,19 @@ def run_matching(idx_dicom_file: str,
         file.close()
     
 if __name__ == '__main__': 
+    dataset = "TCIA_NSCLC-Radiogenomics"
+    dataset_short = dataset.split("_")[-1]
+    area = "Lung"
+
     logger = logging.getLogger(__name__)
-    logging.basicConfig(filename = dirs.LOGS / "match_no_match_ann_img_seg_OCTANE.log", encoding='utf-8', level=logging.DEBUG)
+    logging.basicConfig(filename = dirs.LOGS / Path("match_no_match_ann_img_seg_" + dataset + ".log"), encoding='utf-8', level=logging.DEBUG)
     
-    idx_dicom_path = dirs.RAWDATA / "PMCC_OCTANE/.imgtools/images/index.csv"
-    idx_nifti_path = dirs.PROCDATA / "PMCC_OCTANE/images/mit_OCTANE/mit_OCTANE_index.csv"
-    dicom_data_path = dirs.RAWDATA / "PMCC_OCTANE/.imgtools/images/crawl_db.json"
-    ann_seg_data_path = dirs.RAWDATA / "PMCC_OCTANE"
-    out_path = dirs.PROCDATA / "PMCC_OCTANE/metadata/annotation_seg_matching"
-    img_out_path = dirs.RESULTS / "PMCC_OCTANE/visualization/annotation_seg_matching"
+    idx_dicom_path = dirs.RAWDATA / area / dataset / Path(".imgtools/images/index.csv")
+    idx_nifti_path = dirs.PROCDATA / area / dataset / Path("images/mit_" + dataset_short + "/mit_" + dataset_short + "_index.csv")
+    dicom_data_path = dirs.RAWDATA / area / dataset / Path(".imgtools/images/crawl_db.json")
+    ann_seg_data_path = dirs.RAWDATA / area / dataset
+    out_path = dirs.PROCDATA / area / dataset / "metadata/annotation_seg_matching"
+    img_out_path = dirs.RESULTS / dataset / "visualization/annotation_seg_matching"
 
     # out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask")
     # img_out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask/plots")
