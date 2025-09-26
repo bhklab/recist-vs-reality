@@ -42,8 +42,8 @@ def match_pyrad_to_ann_seg(nifti_file_path: Path,
             logger.debug("Current matched row has more than one segmentation for this tumour.") 
         
         seg_nifti_full_path = curr_matched["SegNIFTILocation"].values[0]
-        seg_nifti_path = "/".join(seg_nifti_full_path.split("/")[-4:])
-        
+        seg_nifti_path = "/".join(seg_nifti_full_path.split("/")[-4:-1]) + "/GTV.nii.gz" #This is only for NSCLC radiogenomics
+        # seg_nifti_path = "/".join(seg_nifti_full_path.split("/")[-4:])
         #Check if the current segmentation was used in feature extraction. If so, match it with the appropriate annotation,
         #imaging, and segmentation data for further processing
         if pyrad_data["Mask"].isin([str(seg_nifti_path)]).any(): 
@@ -61,7 +61,7 @@ def calc_ttest_stats(ann_seg_pyrad_df: pd.DataFrame,
                      feat_names: list, 
                      epsilons: list): 
     '''
-    Calculates the p-values for a two-sample t-test and two one-sided t-tests (TOST) comparing the long axis annotation
+    Calculates the p-values for a two-sample t-test, paired t-test, and two one-sided t-tests (TOST) comparing the long axis annotation
     measurements and the desired PyRadiomics measurements.
 
     Parameters
@@ -94,6 +94,11 @@ def calc_ttest_stats(ann_seg_pyrad_df: pd.DataFrame,
         curr_stats["TwoSampleTTest_p"] = [two_samp_t[1]]
         # curr_stats["TwoSampleTTest_df"] = two_samp_t[2] #For some reason this gives an index out of range error? Degrees of freedom not a returnable value?
 
+        #Paired t-test
+        paired_t = stats.ttest_rel(ann_seg_pyrad_df["AnnLongAxisLength"].astype(float), ann_seg_pyrad_df[feature])
+        curr_stats["PairedTTest_stat"] = [paired_t[0]]
+        curr_stats["PairedTTest_p"] = [paired_t[1]]
+
         #TOST
         for e in epsilons: 
             _, p_greater = stats.ttest_ind(ann_seg_pyrad_df["AnnLongAxisLength"].astype(float) + e, 
@@ -115,9 +120,9 @@ def calc_ttest_stats(ann_seg_pyrad_df: pd.DataFrame,
     return ann_pyrad_stats
 
 if __name__ == '__main__': 
-    dataset = "TCIA_CPTAC-CCRCC" 
+    dataset = "TCIA_NSCLC-Radiogenomics" 
     dataset_short = dataset.split("_")[-1]
-    area = "Abdomen"
+    area = "Lung"
 
     logger = logging.getLogger(__name__)
     logging.basicConfig(filename=dirs.LOGS / (dataset + "_recist_diam_stats.log"), encoding='utf-8', level=logging.DEBUG)
@@ -141,7 +146,10 @@ if __name__ == '__main__':
                      "original_shape_Maximum2DDiameterSlice", 
                      "original_shape_MajorAxisLength", 
                      "original_shape_MinorAxisLength", 
-                     "original_shape_LeastAxisLength"]
+                     "original_shape_LeastAxisLength",
+                     "original_shape_MeshVolume", 
+                     "original_shape_VoxelVolume", 
+                     "original_shape_gordon_tva"]
     
     annotation_pyrad_stats = calc_ttest_stats(ann_seg_pyrad_df = match_pyrad_ann_df, 
                                               feat_names = feature_names, 
