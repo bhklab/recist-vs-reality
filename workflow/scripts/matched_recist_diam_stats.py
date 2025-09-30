@@ -1,6 +1,7 @@
 import pandas as pd 
 import logging
 import matplotlib.pyplot as plt
+import numpy as np
 
 from scipy import stats
 from pathlib import Path 
@@ -42,8 +43,8 @@ def match_pyrad_to_ann_seg(nifti_file_path: Path,
             logger.debug("Current matched row has more than one segmentation for this tumour.") 
         
         seg_nifti_full_path = curr_matched["SegNIFTILocation"].values[0]
-        seg_nifti_path = "/".join(seg_nifti_full_path.split("/")[-4:-1]) + "/GTV.nii.gz" #This is only for NSCLC radiogenomics
-        # seg_nifti_path = "/".join(seg_nifti_full_path.split("/")[-4:])
+        # seg_nifti_path = "/".join(seg_nifti_full_path.split("/")[-4:-1]) + "/GTV.nii.gz" #This is only for NSCLC radiogenomics
+        seg_nifti_path = "/".join(seg_nifti_full_path.split("/")[-4:])
         #Check if the current segmentation was used in feature extraction. If so, match it with the appropriate annotation,
         #imaging, and segmentation data for further processing
         if pyrad_data["Mask"].isin([str(seg_nifti_path)]).any(): 
@@ -99,30 +100,82 @@ def calc_ttest_stats(ann_seg_pyrad_df: pd.DataFrame,
         curr_stats["PairedTTest_stat"] = [paired_t[0]]
         curr_stats["PairedTTest_p"] = [paired_t[1]]
 
+        #Calculate relative percentage difference
+        header_measure_diff = "MeasurementDiff_" + feature
+        header_rmd = "RelativeMeasurementDiff_" + feature
+        ann_seg_pyrad_df[header_measure_diff] = ann_seg_pyrad_df[feature] - ann_seg_pyrad_df["AnnLongAxisLength"]
+        ann_seg_pyrad_df[header_rmd] = ann_seg_pyrad_df[header_measure_diff] / ((ann_seg_pyrad_df["AnnLongAxisLength"] + ann_seg_pyrad_df[feature])/2) * 100 
+
+        #Calculate log ratio (using natural log for now)
+        header_logratio = "LogRatio_" + feature
+        ann_seg_pyrad_df[header_logratio] = np.log((ann_seg_pyrad_df[feature] / ann_seg_pyrad_df["AnnLongAxisLength"].astype(float)))
+
+        #Create a column of all zeros to compare the relative percentage difference and log ratio differences to in the TOST
+        ann_seg_pyrad_df["Zeros"] = 0
+
         #TOST
         for e in epsilons: 
-            _, p_greater = stats.ttest_ind(ann_seg_pyrad_df["AnnLongAxisLength"].astype(float) + e, 
+            #For just the raw measurements. Equivalence margins are in mm. 
+            _, p_greater_raw = stats.ttest_ind(ann_seg_pyrad_df["AnnLongAxisLength"].astype(float) + e, 
                                            ann_seg_pyrad_df[feature], 
                                            alternative = "greater")
-            _, p_lesser = stats.ttest_ind(ann_seg_pyrad_df["AnnLongAxisLength"].astype(float) - e, 
+            _, p_lesser_raw = stats.ttest_ind(ann_seg_pyrad_df["AnnLongAxisLength"].astype(float) - e, 
                                           ann_seg_pyrad_df[feature], 
                                           alternative = "less")
-            pval = max(p_greater, p_lesser) 
+            pval_raw = max(p_greater_raw, p_lesser_raw) 
 
-            header = "TOST_e" + str(e) + "_p" #Create header name for TOST p-value based on the epsilon value used
-            curr_stats[header] = [pval]
-        
+            header_raw = "TOST_Raw_e" + str(e) + "_p" #Create header name for TOST p-value based on the epsilon value used
+            curr_stats[header_raw] = [pval_raw]
+
+            #For relative measurement differences. Equivalence margins are in percentages.
+            _, p_greater_rmd = stats.ttest_ind(ann_seg_pyrad_df[header_rmd].astype(float) + e, 
+                                               ann_seg_pyrad_df["Zeros"], 
+                                               alternative = "greater")
+            _, p_lesser_rmd = stats.ttest_ind(ann_seg_pyrad_df[header_rmd].astype(float) - e, 
+                                               ann_seg_pyrad_df["Zeros"], 
+                                               alternative = "less")
+            
+            pval_rmd = max(p_greater_rmd, p_lesser_rmd)
+
+            header_relmd = "TOST_RMD_e" + str(e) + "_p"
+            curr_stats[header_relmd] = [pval_rmd]
+
+            # #For log ratio. Equivalence margins are in log ratios, and percentage differences are converted to ratios as well. From Caryn's chat about the approach
+            # #e.g. e = 1% --> 0.01
+            # #Ask Caryn about this implementation, not sure if implemented correctly
+
+            # curr_eps = e/100 
+
+            # _, p_greater_logratio = stats.ttest_ind((ann_seg_pyrad_df[header_logratio] + np.log(1+curr_eps)).astype(float),
+            #                                         ann_seg_pyrad_df["Zeros"], 
+            #                                         alternative = "greater")
+            # _, p_lesser_logratio = stats.ttest_ind((ann_seg_pyrad_df[header_logratio] - np.log(1-curr_eps)).astype(float), 
+            #                                        ann_seg_pyrad_df["Zeros"], 
+            #                                        alternative = "less") 
+                       
+            # pval_logratio = max(p_greater_logratio, p_lesser_logratio)
+
+            # header_lr = "TOST_LogRatio_e" + str(e) + "_p"
+            # curr_stats[header_lr] = [pval_logratio]
+
         if ann_pyrad_stats.empty: 
             ann_pyrad_stats = curr_stats
         else: 
             ann_pyrad_stats = pd.concat([ann_pyrad_stats, curr_stats]).reset_index(drop=True)
+
+    # #Sort results so that they are in specific order for each test 
+    # tost_headers = ann_pyrad_stats.columns[ann_pyrad_stats.columns.str.contains("TOST")].tolist()
+    # non_tost_headers = [col for col in ann_pyrad_stats.columns if col not in tost_headers]
+    # sorted_tost_names = sorted(tost_headers)
+    # sorted_col_order = non_tost_headers + sorted_tost_names
+    # ann_pyrad_stats = ann_pyrad_stats[sorted_col_order]
     
     return ann_pyrad_stats
 
 if __name__ == '__main__': 
-    dataset = "TCIA_NSCLC-Radiogenomics" 
+    dataset = "PMCC_OCTANE" 
     dataset_short = dataset.split("_")[-1]
-    area = "Lung"
+    area = ""
 
     logger = logging.getLogger(__name__)
     logging.basicConfig(filename=dirs.LOGS / (dataset + "_recist_diam_stats.log"), encoding='utf-8', level=logging.DEBUG)
@@ -139,7 +192,7 @@ if __name__ == '__main__':
                                                 pyrad_data = pyrad_df, 
                                                 ann_seg_match_data = matched_data_df)
     
-    eps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] #Trying different epsilons until we decide on an acceptable equivalence margin
+    eps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] #Trying different epsilons until we decide on an acceptable equivalence margin
     feature_names = ["original_shape_Maximum3DDiameter", 
                      "original_shape_Maximum2DDiameterColumn", 
                      "original_shape_Maximum2DDiameterRow", 
