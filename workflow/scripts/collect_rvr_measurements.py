@@ -107,9 +107,10 @@ def get_tumour_measurements(feature_df: pd.DataFrame,
 @click.option('--feat_path', help = 'Path to pyradiomics feature .csv file')
 @click.option('--export_path', help = 'Path to export directory')
 @click.option('--export_filename', help = 'Name of consolidated feature .csv file')
-def create_rvr_measurements(feat_path: str, 
-                            export_path: str,
-                            export_filename: str): 
+def create_rvr_measurements(feat_path: str,
+                            dataset_name: str,
+                            export_path: str = None,
+                            export_filename: str = None): 
     '''
     Consolidates measurement features from pyradiomics feature file and exports it to a provided destination. 
     
