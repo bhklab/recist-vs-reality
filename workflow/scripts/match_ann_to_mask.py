@@ -1342,110 +1342,106 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
     return match_info_summary, no_match_info_summary
 
 @click.command()
-@click.option('--idx_dicom_file', help = 'Path and name of DICOM index.csv file created by med-imagetools')
-@click.option('--idx_nifti_file', help = 'Path and name of mit_DATASET_index.csv file creaded by med-imagetools')
-@click.option('--crawl_db_file', help = 'Path and name of crawl_db.json file created by med-imagetools')
-@click.option('--dataset_path', help = 'Path containing images folder for annotations, imaging, and segmentations. Used to get segmentations')
-@click.option('--log_path', help = 'Path for log file to be created')
-@click.option('--df_out_path', help = 'Destination for outputted csv files')
-@click.option('--plot_out_path', help = 'Destination for outputted annotation-image-segmentation overlay plots')
+@click.option('--idx_nifti_file', help = 'Name of index file created by med-imagetools for the NIFTI files (not full path, just name of .csv file)')
+@click.option('--dataset_full_name', help = 'Full name of dataset (e.g. TCIA_CPTAC-CCRCC). Disease type must be last substring when delimiting by _')
+@click.option('--disease_site', help = 'Where the disease is located (e.g. Abdomen, Lung, etc.). Corresponds to file structure.')
 @click.option('--get_intermediate_dfs', default = False, help = 'Determines if you output the annotation-to-image and image-to-segmentation matching files. Default False.')
-def run_matching(idx_dicom_file: str,
-                 idx_nifti_file: str,
-                 crawl_db_file: str, 
-                 ann_dcm_path: str, 
-                 dataset_path: str, 
-                 log_path: str, 
-                 df_out_path: str, 
-                 plot_out_path: str, 
+def run_matching(idx_nifti_file: str,
+                 dataset_full_name: str, 
+                 disease_site: str,
                  get_intermediate_dfs: bool
                  ): 
-    
-    log_path = Path(log_path)
-    idx_dicom_file = Path(idx_dicom_file)
-    idx_nifti_file = Path(idx_nifti_file)
-    crawl_db_file = Path(crawl_db_file)
-    ann_dcm_path = Path(ann_dcm_path)
-    dataset_path = Path(dataset_path)
-    df_out_path = Path(df_out_path)
-    plot_out_path = Path(plot_out_path)
-
-    logging.basicConfig(filename=log_path / "match_ann_to_seg.log", encoding='utf-8', level=logging.DEBUG)
-
-    index_df = pd.read_csv(idx_dicom_file)
-
-    matched_ann_img_df = match_ann_to_image(index_df) 
-
-    matched_img_seg_df = match_img_to_seg(index_df, matched_ann_img_df) 
-
-    if not df_out_path.exists():
-        Path(df_out_path).mkdir(parents=True, exist_ok = True)
-
-    if not plot_out_path.exists(): 
-        Path(plot_out_path).mkdir(parents=True, exist_ok = True)
-
-    if get_intermediate_dfs: 
-        matched_ann_img_df.to_csv(df_out_path / "matching_ann_to_img.csv", index = False)
-        matched_img_seg_df.to_csv(df_out_path / "matching_img_to_seg.csv", index = False)
-
-    with open(crawl_db_file, 'r') as file: 
-        dicom_data_json = file.read()
-        dicom_data_dict = json.loads(dicom_data_json)
-
-        # matched_ann_seg, no_match_ann_seg = match_ann_to_seg(matched_ann_img_df, matched_img_seg_df, dicom_data_dict, ann_dcm_path, dataset_path)
-        matched_ann_seg, no_match_ann_seg = match_ann_to_seg(match_ann_img_df = matched_ann_img_df, 
-                                                             match_img_seg_df = matched_img_seg_df, 
-                                                             dicom_info_dict = dicom_data_dict, 
-                                                             nifti_idx_path = idx_nifti_file, 
-                                                             ann_seg_dicom_path = dataset_path, 
-                                                             img_out_path = plot_out_path)
-        matched_ann_seg.to_csv(df_out_path / "matching_ann_to_seg.csv", index = False)
-        no_match_ann_seg.to_csv(df_out_path / "no_matching_ann_to_seg.csv", index = False)
-
-        file.close()
-    
-if __name__ == '__main__': 
-    dataset = "TCIA_NSCLC-Radiogenomics"
-    dataset_short = dataset.split("_")[-1]
-    area = "Lung"
-
+    #Configure logger
     logger = logging.getLogger(__name__)
-    logging.basicConfig(filename = dirs.LOGS / Path("match_no_match_ann_img_seg_" + dataset + ".log"), encoding='utf-8', level=logging.DEBUG)
+    logging.basicConfig(filename = dirs.LOGS / Path("match_no_match_ann_img_seg_" + dataset_full_name + ".log"), encoding='utf-8', level=logging.DEBUG)
+
+    #Set up default data paths 
+    idx_dicom_path = dirs.RAWDATA / disease_site / dataset_full_name / Path(".imgtools/images/index.csv")
+    idx_nifti_path = dirs.PROCDATA / disease_site / dataset_full_name / Path("images/" + idx_nifti_file)
+    dicom_data_path = dirs.RAWDATA / disease_site / dataset_full_name / Path(".imgtools/images/crawl_db.json")
+    ann_seg_data_path = dirs.RAWDATA / disease_site / dataset_full_name
+    out_path = dirs.PROCDATA / disease_site / dataset_full_name / "metadata/annotation_seg_matching"
+    img_out_path = dirs.RESULTS / dataset_full_name / "visualization/annotation_seg_matching"
     
-    idx_dicom_path = dirs.RAWDATA / area / dataset / Path(".imgtools/images/index.csv")
-    idx_nifti_path = dirs.PROCDATA / area / dataset / Path("images/mit_" + dataset_short + "/mit_" + dataset_short + "_index.csv")
-    dicom_data_path = dirs.RAWDATA / area / dataset / Path(".imgtools/images/crawl_db.json")
-    ann_seg_data_path = dirs.RAWDATA / area / dataset
-    out_path = dirs.PROCDATA / area / dataset / "metadata/annotation_seg_matching"
-    img_out_path = dirs.RESULTS / dataset / "visualization/annotation_seg_matching"
+    index_df = pd.read_csv(idx_dicom_path) #Get the dicom index file read
 
-    # out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask")
-    # img_out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask/plots")
+    matched_ann_img_df = match_ann_to_image(index_df) #Run matching between annotations and images
 
+    matched_img_seg_df = match_img_to_seg(index_df, matched_ann_img_df) #Run matching for images and segmentations based on the subset of images that had annotations
+
+    #Make directories
     if not out_path.exists():
         Path(out_path).mkdir(parents=True, exist_ok = True)
 
     if not img_out_path.exists(): 
         Path(img_out_path).mkdir(parents=True, exist_ok = True)
-    index_dicom_df = pd.read_csv(idx_dicom_path)
-    
-    matched_ann_img_df = match_ann_to_image(index_dicom_df) 
-    matched_img_seg_df = match_img_to_seg(index_dicom_df, matched_ann_img_df)
 
+    #Output the intermediate matching files if requested
+    if get_intermediate_dfs: 
+        matched_ann_img_df.to_csv(out_path / "matching_ann_to_img.csv", index = False)
+        matched_img_seg_df.to_csv(out_path / "matching_img_to_seg.csv", index = False)
 
     with open(dicom_data_path, 'r') as file: 
         dicom_data_json = file.read()
-        dicom_data_dict = json.loads(dicom_data_json)
+        dicom_data_dict = json.loads(dicom_data_json) #Load in crawl_db.json file for annotation to segmentation matching
 
+        #Get dataframes of patients that did and did not have confirmed matches
         matched_ann_seg, no_match_ann_seg = match_ann_to_seg(match_ann_img_df = matched_ann_img_df, 
                                                              match_img_seg_df = matched_img_seg_df, 
                                                              dicom_info_dict = dicom_data_dict, 
                                                              nifti_idx_path = idx_nifti_path, 
-                                                             ann_seg_dicom_path = ann_seg_data_path,  
+                                                             ann_seg_dicom_path = ann_seg_data_path, 
                                                              img_out_path = img_out_path)
+        
+        #Output match and no match dataframes to csv
         matched_ann_seg.to_csv(out_path / "matching_ann_to_seg.csv", index = False)
-        no_match_ann_seg.to_csv(out_path / "no_match_ann_to_seg.csv", index = False)
+        no_match_ann_seg.to_csv(out_path / "no_matching_ann_to_seg.csv", index = False)
 
         file.close()
     
-    #run_matching()
+if __name__ == '__main__': 
+    run_matching()
+
+    ## OLD CODE WITHOUT CLICK FUNCTIONALITY ##
+    # dataset = "TCIA_NSCLC-Radiogenomics"
+    # dataset_short = dataset.split("_")[-1]
+    # area = "Lung"
+
+    # logger = logging.getLogger(__name__)
+    # logging.basicConfig(filename = dirs.LOGS / Path("match_no_match_ann_img_seg_" + dataset + ".log"), encoding='utf-8', level=logging.DEBUG)
+    
+    # idx_dicom_path = dirs.RAWDATA / area / dataset / Path(".imgtools/images/index.csv")
+    # idx_nifti_path = dirs.PROCDATA / area / dataset / Path("images/mit_" + dataset_short + "/mit_" + dataset_short + "_index.csv")
+    # dicom_data_path = dirs.RAWDATA / area / dataset / Path(".imgtools/images/crawl_db.json")
+    # ann_seg_data_path = dirs.RAWDATA / area / dataset
+    # out_path = dirs.PROCDATA / area / dataset / "metadata/annotation_seg_matching"
+    # img_out_path = dirs.RESULTS / dataset / "visualization/annotation_seg_matching"
+
+    # # out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask")
+    # # img_out_path = Path("/home/bhkuser/bhklab/kaitlyn/aaura_paper0/workflow/testing/matching_ann_to_mask/plots")
+
+    # if not out_path.exists():
+    #     Path(out_path).mkdir(parents=True, exist_ok = True)
+
+    # if not img_out_path.exists(): 
+    #     Path(img_out_path).mkdir(parents=True, exist_ok = True)
+    # index_dicom_df = pd.read_csv(idx_dicom_path)
+    
+    # matched_ann_img_df = match_ann_to_image(index_dicom_df) 
+    # matched_img_seg_df = match_img_to_seg(index_dicom_df, matched_ann_img_df)
+
+
+    # with open(dicom_data_path, 'r') as file: 
+    #     dicom_data_json = file.read()
+    #     dicom_data_dict = json.loads(dicom_data_json)
+
+    #     matched_ann_seg, no_match_ann_seg = match_ann_to_seg(match_ann_img_df = matched_ann_img_df, 
+    #                                                          match_img_seg_df = matched_img_seg_df, 
+    #                                                          dicom_info_dict = dicom_data_dict, 
+    #                                                          nifti_idx_path = idx_nifti_path, 
+    #                                                          ann_seg_dicom_path = ann_seg_data_path,  
+    #                                                          img_out_path = img_out_path)
+    #     matched_ann_seg.to_csv(out_path / "matching_ann_to_seg.csv", index = False)
+    #     no_match_ann_seg.to_csv(out_path / "no_match_ann_to_seg.csv", index = False)
+
+    #     file.close()
