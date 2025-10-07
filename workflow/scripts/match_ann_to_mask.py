@@ -854,7 +854,7 @@ def get_slice_num(inst_slice: str,
 def plot_img_seg_ann(tum_info: pd.Series,
                      img_slice: np.array,
                      seg_slice: np.array, 
-                     save_path: Path): 
+                     save_path: Path = Path(dirs.RESULTS / 'visualization/annotation_seg_matching')): 
     '''
     Plots the annotation measured axes and the intersection point on the corresponding segmentation overlaying the image slice. 
 
@@ -869,7 +869,10 @@ def plot_img_seg_ann(tum_info: pd.Series,
     save_path: Path 
         Where to save the plot once finished
     '''
-    
+    #Create save path if it isn't already there
+    if not save_path.exists():
+        Path(save_path).mkdir(parents=True, exist_ok = True)
+
     plt.imshow(img_slice, cmap="Greys_r") #Plot imaging with a grayscale adjustment. 
     plt.imshow(seg_slice, alpha = 0.7, cmap ="Accent") #Overlay the a translucent segmentation mask over the image to denote the tumour. 
     plt.plot([tum_info["LongAxisCoords"][0], tum_info["LongAxisCoords"][2]], 
