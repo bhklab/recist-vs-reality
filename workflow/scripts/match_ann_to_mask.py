@@ -556,7 +556,7 @@ def get_ann_measurements(ann_dicom_file_path: Path):
     cont_sequence1_len = len(parent_cont_seq[4]["ContentSequence"].value)
     for cont_seq in range(cont_sequence1_len):
         cont_sequence2_len = len(parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"].value)
-        for cont_seq2 in range(cont_sequence2_len): #This should be redone into a more systematic search for a "long axis" or "short axis" value later.
+        for cont_seq2 in range(cont_sequence2_len): #TODO: Redo (if possible) into a more systematic search for a "long axis" or "short axis" value. May use dpath package for this.
             conc_name_code_seq = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
             if conc_name_code_seq == "Long Axis": 
                 measure_type_long = parent_cont_seq[4]["ContentSequence"][cont_seq]["ContentSequence"][cont_seq2]["ConceptNameCodeSequence"][0]["CodeMeaning"].value
@@ -1045,6 +1045,7 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
     no_match_info_summary: pd.DataFrame
         Contains the information for annotations that do not have segmentation matches. Segmentation info left blank. 
     '''
+    #Define column headers for the annotation-segmentation file
     cols = ["PatientID", 
             "StudyInstanceUID", 
             "ImgSeriesInstanceUID", 
@@ -1074,43 +1075,45 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
             "SegNIFTILocation"       
            ]
     
+    #Initialize final dataframes
     match_info_summary = pd.DataFrame(columns = cols) 
     no_match_info_summary = pd.DataFrame(columns = cols)
 
+    #Go through each unique annotation file to find potential matches
     for ann_seriesInstUID in match_ann_img_df["AnnSeriesInstanceUID"]:
-        img_ann_info = match_ann_img_df[match_ann_img_df["AnnSeriesInstanceUID"] == ann_seriesInstUID]
-        ann_series_info = dicom_info_dict[ann_seriesInstUID]
+        img_ann_info = match_ann_img_df[match_ann_img_df["AnnSeriesInstanceUID"] == ann_seriesInstUID] #Get the subset of images that the annotation referenced 
+        ann_series_info = dicom_info_dict[ann_seriesInstUID] #From the crawl_db.json, get the information pertaining the current annotation
         ann_dicom_info = ann_series_info["1"] #Assumes that all SRs have SubSeries "1" and only "1"
 
-        ann_refSOPUIDs = ann_dicom_info["ReferencedSOPUIDs"]
-        if len(ann_refSOPUIDs) > 1: 
+        ann_refSOPUIDs = ann_dicom_info["ReferencedSOPUIDs"] #Get the referenced slice IDs, one slice per annotation 
+        if len(ann_refSOPUIDs) > 1: #If there are multiple annotations in one file, document it
             logger.debug("More than one slice referenced in annotation SeriesInstanceUID: %s", ann_seriesInstUID)
             logger.debug("Slices listed: ") 
             logger.debug(ann_refSOPUIDs)
 
         #Get RECIST measurement and check though all measurements if multiple
         inst = list(ann_dicom_info["instances"])
-        filename = ann_dicom_info["instances"][inst[0]]
+        filename = ann_dicom_info["instances"][inst[0]] #From the crawl_db information, get the filename that corresponds to it
         logger.info("Corresponding annotation file for below measurements: %s", filename) #Assumes only one instance for each SR
         
-        ann_file_path = ann_seg_dicom_path / img_ann_info["AnnLocation"].iloc[0] / filename
-        tum_measurements = get_ann_measurements(ann_file_path)
+        ann_file_path = ann_seg_dicom_path / img_ann_info["AnnLocation"].iloc[0] / filename #Make the full annotation file path
+        tum_measurements = get_ann_measurements(ann_file_path) #Get all of the tumour measurements within the DICOM file. Could me multiple annotations. 
         if tum_measurements.empty:
             continue #If entering this check, this means that the annotation DICOM file is currently unavailable
         
-        ann_refSeriesUID = ann_dicom_info["ReferencedSeriesUID"]
+        ann_refSeriesUID = ann_dicom_info["ReferencedSeriesUID"] #Get the image that the annotation referenced
         
-        for refSOPUID in ann_refSOPUIDs: 
-            curr_measurements = tum_measurements[tum_measurements["LongAxisRefSOPUID"] == refSOPUID]
-            if curr_measurements.shape[0] > 1: 
+        for refSOPUID in ann_refSOPUIDs: #Go through all of the slices referenced within the annotation file
+            curr_measurements = tum_measurements[tum_measurements["LongAxisRefSOPUID"] == refSOPUID] #Get the measurements for the current slice
+            if curr_measurements.shape[0] > 1: #Check if they have multiple measurements on the same slice
                 logger.debug("Multiple long axis measurements on the same slice")
 
             #Handling duplicate imaging SeriesInstanceUIDs (for ones with multiple SubSeries) 
-            if img_ann_info["ImgSubSeries"].values[0] == "N/A": 
-                logger.info("Finding correct imaging subseries.")
-                img_ser_instUID = img_ann_info["ImgSeriesInstanceUID"].values[0]
-                image_series_info = dicom_info_dict[img_ser_instUID]
-                for subseries in image_series_info: 
+            if img_ann_info["ImgSubSeries"].values[0] == "N/A": #N/A is the value given in the previous matching function for the case of multiple subseries
+                logger.info("Finding correct imaging subseries.") 
+                img_ser_instUID = img_ann_info["ImgSeriesInstanceUID"].values[0] #Get the image series instance UID to access the DICOM info
+                image_series_info = dicom_info_dict[img_ser_instUID] #Get DICOM info from crawl_db using the series instance UID
+                for subseries in image_series_info: #Go through all the subseries listed in the image series and test if the current slice of interest is in it
                     image_dicom_info = image_series_info[str(subseries)]
                     img_inst = list(image_dicom_info['instances'])
                     if refSOPUID in img_inst: 
@@ -1118,23 +1121,23 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
             else: 
                 img_subseries = str(img_ann_info["ImgSubSeries"].values[0])
 
-            match_seg_tests = match_img_seg_df[match_img_seg_df["SegReferencedSeriesUID"] == ann_refSeriesUID] 
+            match_seg_tests = match_img_seg_df[match_img_seg_df["SegReferencedSeriesUID"] == ann_refSeriesUID] #Get all of the segmentations that were done on the current image
 
-            potential_seg_matches = list()
+            potential_seg_matches = list() #Initialize list for potential segmentation matches (will have series instance UIDs of segmentations that match)
 
             for seg_seriesInstUID in match_seg_tests["SegSeriesInstanceUID"]: 
                 curr_info = match_seg_tests[match_seg_tests["SegSeriesInstanceUID"] == seg_seriesInstUID]
                 seg_series_info = dicom_info_dict[seg_seriesInstUID]
                 seg_dicom_info = seg_series_info["1"] #Assumes the same as SRs subseries
 
-                if curr_info["SegModality"].values[0] == "SEG": 
+                if curr_info["SegModality"].values[0] == "SEG": #If modality is SEG, the referenced slices are already listed in the crawl_db.json file
                     seg_refSOPUIDs = seg_dicom_info["ReferencedSOPUIDs"]
-                    if len(list(seg_dicom_info["instances"])) > 1: 
+                    if len(list(seg_dicom_info["instances"])) > 1: #Check for multiple segmentations performed on the same image in the same file. This is usually rare.
                         logger.debug("More than one segmentation found in the segmentation file for Patient ID: %s. Please double check this. Relevant data below:", seg_dicom_info["PatientID"])
                         logger.debug(seg_refSOPUIDs)
                         continue
                     
-                elif curr_info["SegModality"].values[0] == "RTSTRUCT": 
+                elif curr_info["SegModality"].values[0] == "RTSTRUCT": #If modality is RTSTRUCT, referenced slices are not found in crawl_db, need to parse DICOM file for them
                     seg_partial_path = seg_dicom_info["folder"]
                     #Check for multiple files within the folder
                     seg_dicom_folder = ann_seg_dicom_path / seg_partial_path
@@ -1150,18 +1153,18 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                         seg_filename = [f for f in seg_dicom_folder.iterdir()][0] #Get the only filename in that folder
                         seg_dicom_file = seg_dicom_folder / seg_filename
                     
-                    seg_refSOPUIDs = get_rtstruct_SOPUIDs(seg_dicom_file)
+                    seg_refSOPUIDs = get_rtstruct_SOPUIDs(seg_dicom_file) #Get all of the referenced slices within the segmentation
 
                 else: 
                     logger.error("Segmentation modality %s is currently not supported. Skipping segmentation", curr_info["SegModality"])
 
-                if refSOPUID in seg_refSOPUIDs: 
-                    potential_seg_matches.append(seg_dicom_info["SeriesInstanceUID"])
+                if refSOPUID in seg_refSOPUIDs: #Check if the current referenced slice from the annotation is in the segmentation and if so, append the segmentation ID as a potential match
+                    potential_seg_matches.append(seg_dicom_info["SeriesInstanceUID"]) 
 
-            if len(potential_seg_matches) > 1: 
+            if len(potential_seg_matches) > 1: #Check if multiple segmentations match for the given annotation. 
                 logger.debug("Annotation-segmentation matching indeterminant for annotation SeriesInstanceUID: %s. Annotation within multiple segmentation slices.", ann_refSeriesUID)
                 logger.debug("Potential segmentation matches for %s: %s", ann_refSeriesUID, potential_seg_matches)
-            elif len(potential_seg_matches) < 1: 
+            elif len(potential_seg_matches) < 1: #Check if there was no match found and prepare information to be added to the no match dataframe 
                 logger.debug("No segmentation match found for annotation SeriesInstanceUID: %s with ReferencedSOPUID: %s", ann_seriesInstUID, refSOPUID)
                 no_matched_info = [ann_dicom_info["PatientID"], 
                             ann_dicom_info["StudyInstanceUID"], 
@@ -1192,22 +1195,24 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                             None]
                 
                 no_match_df = pd.DataFrame([no_matched_info], columns = cols)
+                #Check if this is the first time a no match has happened and if it is, don't concat but reassign (got a warning about a deprication with just concatenating)
                 if no_match_info_summary.empty: 
                     no_match_info_summary = no_match_df
                 else: 
                     no_match_info_summary = pd.concat([no_match_info_summary, no_match_df])
                 continue 
 
-            for seg_match in potential_seg_matches: 
-                curr_seg_info = match_img_seg_df[match_img_seg_df["SegSeriesInstanceUID"] == seg_match]
+            for seg_match in potential_seg_matches: #Go through all of the potential segmentation matches that were found to see if one of them is a match to the annotation
+                curr_seg_info = match_img_seg_df[match_img_seg_df["SegSeriesInstanceUID"] == seg_match] #Get the current segmentation information from the image-segmentation match file
 
-                img_locs, seg_locs = get_nifti_locs(nifti_idx_path, curr_seg_info)
+                img_locs, seg_locs = get_nifti_locs(nifti_idx_path, curr_seg_info) #From the current segmentation info, find the location of the image and segmentation NIFTI files
 
-                #Have to enter this loop since there are scenarios where the nifti files got converted to be mapped to the same
+                #Have to enter this loop since there are scenarios where the NIFTI files got converted to be mapped to the same
                 #segmentation series instance UIDs 
                 for idx, measurement in curr_measurements.iterrows():
                     #Check to see if these coordinates have already been checked though for this patient (handles annotation duplicates)
                     if not match_info_summary.empty: 
+                        #Check to see if the long axis coordinates and patient ID is already noted in the matches (just in case there are duplicate long axis coordinates across patients after rounding)
                         in_matches = curr_measurements["LongAxisCoords"].values[0] in match_info_summary["AnnLongAxisCoordinates"].values.tolist() and curr_measurements["AnnPatientID"].values[0] in match_info_summary["PatientID"].values.tolist()
                         if in_matches: 
                             #A duplicate measurement was found. Going to skip this measurement for this slice. 
@@ -1216,6 +1221,7 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                             continue 
 
                     if not no_match_info_summary.empty: 
+                        #Do the same check as above but in the no matches dataframe 
                         in_no_matches = curr_measurements["LongAxisCoords"].values[0] in no_match_info_summary["AnnLongAxisCoordinates"].values.tolist() and curr_measurements["AnnPatientID"].values[0] in no_match_info_summary["PatientID"].values.tolist()
                         if in_no_matches: 
                             #A duplicate measurement was found. Going to skip this measurement for this slice. 
@@ -1223,7 +1229,7 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                             logger.info("Long axis coordiantes duplicated: %s", curr_measurements["LongAxisCoords"].values[0])
                             continue 
                         
-                    measurement_df = pd.DataFrame(measurement).transpose()
+                    measurement_df = pd.DataFrame(measurement).transpose() #Just turns measurement information into a dataframe from a series while preserving the indexes as headers
                     if img_locs.empty or seg_locs.empty: 
                         #If there was no matching nifti files, count as a no match
                         no_matched_info = [ann_dicom_info["PatientID"], 
@@ -1261,11 +1267,14 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                         else: 
                             no_match_info_summary = pd.concat([no_match_info_summary, no_match_df])
                         continue 
-
+                    #Since there could be multiple segmentations or images associated with an annotation, along with multiple files within the 
+                    #listed segmentation location folder, need to loop through all possible combinations of image and segmentation
                     for i in range(len(seg_locs)): 
                         for j in range(len(img_locs)):
+                            #Get paths of image and segmentation NIFTIs
                             seg_loc = seg_locs.iloc[i]
                             img_loc = img_locs.iloc[j]
+                            #Check if the current annotation's intersection of long and short axis is within the segmentation slice 
                             is_in_seg = confirm_ann_seg_match(measurement_df, img_loc, seg_loc, dicom_info_dict, img_subseries, img_out_path)
                             if is_in_seg: 
                                 matched_info = [ann_dicom_info["PatientID"], 
