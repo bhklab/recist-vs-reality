@@ -127,11 +127,20 @@ def create_rvr_measurements(feat_path: str,
 
     consol_feats = get_tumour_measurements(feature_data, diameters = "axis_len")
 
-    export_path = Path(export_path)
-    if not export_path.exists():
-        Path(export_path).mkdir(parents=True, exist_ok = True)
+# Add an input parameter for dataset
 
-    consol_feats.to_csv(export_path / export_filename, index = False)
+if export_path:
+    export_path = Path(export_path)
+else:
+    export_path = dirs.PROCDATA / dataset / "features" / "rvr_measurements"
+
+if not export_path.exists():
+    Path(export_path).mkdir(parents=True, exist_ok = True)
+
+if export_filename is None:
+    export_filename = / f"pyradiomics_measurement_subset_{diameters}.csv"  
+
+consol_feats.to_csv(export_path / export_filename, index = False)
 
 if __name__ == '__main__':
     create_rvr_measurements()
