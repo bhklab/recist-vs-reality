@@ -504,7 +504,109 @@ def organize_long_measures(patient_ID: str,
             tum_info = pd.concat([tum_info, curr_info_df])
     
     return tum_info
-    
+
+def convert_pydicom_to_dict(pydcm_dataset: pydicom.dataset.Dataset):
+    '''
+    Recursively converts a pydicom dataset into a nested dictionary for easier search capabilities later on. 
+    Function gotten from https://github.com/pydicom/pydicom/issues/319
+
+    Parameters
+    ----------
+    pydcm_dataset: pydicom.dataset.Dataset 
+        A structured report DICOM that has been converted into a pydicom dataset object
+
+    Returns
+    ----------
+    dcm_dict: dict
+        A Python dictionary with all DICOM information stored in it. Keys are the element value representations
+    '''
+    dcm_dict = dict() 
+    for element in pydcm_dataset: # Go through all element data listed in the dataset
+        if element.VR != "SQ": #If the element's value representation is not a sequence
+            dcm_dict[element.name] = str(element.value) #Store the DICOM header info with keys as element names
+        else: 
+            #Call function recursively for each element stored in the sequence
+            dcm_dict[element.name] = [convert_pydicom_to_dict(item) for item in element]
+        
+    return dcm_dict
+
+def get_dcm_tag_info(dicom_dict: dict, 
+                     dicom_tag: str, 
+                     curr_path: list = None, 
+                     dicom_value: str = None
+                    ): 
+    '''
+    Recursively searches for a specific DICOM tag using the inputed value representation and outputs the key-value pairs that have that information. 
+    Also gets the location in the dictionary at which those key-value pairs were found.  
+    Can begin from the root or from a specific node of the structure. Option to only find keys with a specific value. 
+
+    Parameters
+    ----------
+    dicom_dict: dict
+        A dictionary with all DICOM information stored in it. Keys are element value representations. 
+    dicom_tag: str
+        The DICOM tag you are trying to search for. Expects capitalization and spacing.
+    curr_path: list
+        The path to a specific part of the nested dictionary stored in a list. To be used in recursion. 
+        Leave this as None when initially calling function. Subset dictionary first if you don't want to look through all of it. 
+    dicom_value: str
+        Option to only return keys with a specific value inputted here.
+
+    Returns
+    ----------
+    key_val_loc: list
+        A list containing the searched DICOM tag, the values associated with that term, and the location at which it was found in the dictionary.
+    '''
+
+    if curr_path is None: 
+        curr_path = []
+
+    # Check if value is a list (this is for multiple nested dictionaries found at the same node)
+    if isinstance(dicom_dict, list): 
+        for index, value in enumerate(dicom_dict): 
+            new_path = list(curr_path)
+            new_path.append(index)
+
+            for found_tag in get_dcm_tag_info(value, 
+                                                dicom_tag, 
+                                                curr_path = new_path, 
+                                                dicom_value = dicom_value): 
+                if dicom_value is not None: 
+                    #Check if the current tag's value matches the one inputted 
+                    if found_tag[1] == dicom_value: 
+                        yield found_tag
+                    else: 
+                        continue
+                else: 
+                    #Entering here --> output all found matches for the inputted DICOM tag
+                    yield found_tag
+
+    # Check if value is a dictionary 
+    if isinstance(dicom_dict, dict): 
+        for key, value in dicom_dict.items():
+            new_path = list(curr_path)
+            new_path.append(key)
+            for found_tag in get_dcm_tag_info(value, 
+                                                dicom_tag, 
+                                                curr_path = new_path,
+                                                dicom_value = dicom_value): 
+                yield found_tag
+
+            if key == dicom_tag: 
+                new_path = list(curr_path)
+                new_path.append(key)
+                key_val = [key, value, new_path] #Output the search term, value found in correspondance to that term, and the location it was found at
+
+                if dicom_value is not None: 
+                    #Check if the current tag's value matches the one inputted 
+                    if key_val[1] == dicom_value: 
+                        yield key_val
+                    else: 
+                        continue
+                else: 
+                    #Entering here --> output all found matches for the inputted DICOM tag
+                    yield key_val
+
 def get_ann_measurements(ann_dicom_file_path: Path): 
     '''
     Scrapes the raw annotation DICOM file for information relating to long axis measurements. Logs all possible measurements. 
@@ -827,27 +929,108 @@ def get_nifti_locs(nifti_idx_path: Path,
     
     return img_niftis, seg_niftis
 
-def get_slice_num(inst_slice: str, 
-                  num_of_slices: int): 
+# #Depricated version of the function, this was one slice off.
+# def get_slice_num(inst_slice: str, 
+#                   num_of_slices: int): 
+#     '''
+#     Gets the slice number of based on an instances value from a given referencedSOPUID and then matches it to the order of the nifti slices.
+
+#     Parameters
+#     ----------
+#     inst_slice: str
+#         Reference of the dicom slice file
+#     num_of_slices: int 
+#         Number of slices that are in the whole image
+#     Returns 
+#     ----------
+#     slice_num 
+#         The slice number aligned with the nifti slices
+#     '''
+
+#     subseries_slice = inst_slice.split(".")[0] #Takes the name of the DICOM instance and removes the ".dcm" at the end
+#     dicom_slice = int(subseries_slice.split("-")[-1]) #Gets the slice number from the name of the DICOM instance. See devnotes_kaitlyn.md for more.
+
+#     slice_num = num_of_slices - dicom_slice + 1 #See devnotes_kaitlyn.md for breakdown of this calculation. 
+    
+#     return slice_num 
+
+def get_nested_dict(info_dict: dict, 
+                    keys: list): 
+    '''
+    From a dictionary, navigate to the desired depth using a list of keys. Does not require that the depths are invariable. 
+
+    Parameters 
+    ----------
+    info_dict: dict 
+        The dictionary you are searching through 
+    keys: list
+        A list of keys in order of appearance that correspond to the location in the dicitonary you would like to navigate to
+    
+    Returns
+    ----------
+    requested_dict: dict 
+        The nested dictionary found at the requested location
+    '''
+    #Go through all keys until the nested dictionary is found 
+    curr_depth = info_dict
+    for key in keys: 
+        if isinstance(curr_depth, dict) and key in curr_depth: #Check if the current location holds a dictionary and if the key is found within it
+            curr_depth = curr_depth[key] #Go down in depth by one key 
+        else: 
+            raise KeyError("The pathway that you entered is not traversable in the dictionary provided. Please check.")
+    
+    requested_dict = curr_depth
+
+    return requested_dict
+
+def get_slice_num(slice_SOPUID: str, 
+                  img_ser_instUID: str,
+                  crawl_path: Path): 
     '''
     Gets the slice number of based on an instances value from a given referencedSOPUID and then matches it to the order of the nifti slices.
 
     Parameters
     ----------
-    inst_slice: str
-        Reference of the dicom slice file
-    num_of_slices: int 
-        Number of slices that are in the whole image
+    slice_SOPUID: str
+        The slice SOPUID that was in reference to a structured report's measurement
+    img_ser_instUID: str
+        The image's SOPUID that the measurement is in reference to
+    crawl_path: Path 
+        The path to the crawl_db.json file produced by med-imagetools
+
     Returns 
     ----------
     slice_num 
         The slice number aligned with the nifti slices
     '''
 
-    subseries_slice = inst_slice.split(".")[0] #Takes the name of the DICOM instance and removes the ".dcm" at the end
-    dicom_slice = int(subseries_slice.split("-")[-1]) #Gets the slice number from the name of the DICOM instance. See devnotes_kaitlyn.md for more.
-
-    slice_num = num_of_slices - dicom_slice + 1 #See devnotes_kaitlyn.md for breakdown of this calculation. 
+    # Open the crawl_db.json file and find slice information
+    with open(crawl_path, 'r') as file: 
+        crawl_json = file.read()
+        crawl_dict = json.loads(crawl_json)
+        #See if the crawl has the imaging data and if not, no slice info can be gotten for this patient. No image available to match the annotation. 
+        try: 
+            img_dict = crawl_dict[img_ser_instUID]
+        except KeyError: 
+            logger.debug("Image with Series Instance UID: %s is not present in the crawl file. Please check if this file got successfully converted or if it existed.", img_ser_instUID)
+            return None
+        
+        inst_list = get_dcm_tag_info(dicom_dict = img_dict, 
+                                     dicom_tag = 'instances')
+        
+        #Go through all possible locations for the instances dictionary (containing all slice names) and find the one with the referenced slice
+        for key_val_location in inst_list:
+            curr_loc = key_val_location[2] #Index 2 is where all location data is kept 
+            curr_inst_dict = get_nested_dict(info_dict = img_dict, 
+                                             keys = curr_loc) #Navigate to the appropriate nested dictionary
+            
+            if slice_SOPUID in curr_inst_dict.keys(): 
+                dcm_filename = curr_inst_dict[slice_SOPUID] #Get the DICOM file name associated with the referenced slice
+                #Get the DICOM slice number assuming that the DICOM filename is structured as "[subseries_num]-[slice_number].dcm"
+                subseries_slice = dcm_filename.split(".")[0] #Takes the name of the DICOM instance and removes the ".dcm" at the end
+                dicom_slice = int(subseries_slice.split("-")[-1]) #Gets the slice number from the name of the DICOM instance. Some files don't have the subseries in front, but this check shouldn't mess anything up with that.
+                num_of_slices = len(curr_inst_dict) #Get number of slices; equivalent to the number of items in the instances dictionary
+                slice_num = num_of_slices - dicom_slice #Calculates the slice number from the information given
     
     return slice_num 
 
@@ -958,10 +1141,11 @@ def confirm_ann_seg_match(tum_info_df: pd.DataFrame,
     for idx, row in tum_info_df.iterrows(): 
         #Find the corresponding
         img_seriesInstUID = row["AnnReferencedSeriesUID"] 
-        number_of_slices = img_slice_num
         img_slice_dicom = dicom_data_dict[img_seriesInstUID][image_subseries]["instances"][row["LongAxisRefSOPUID"]] #Get the slice instance name based on the referenced slice ID.
         
-        slice_num = get_slice_num(img_slice_dicom, number_of_slices)
+        slice_num = get_slice_num(slice_SOPUID = img_slice_dicom, 
+                                  img_ser_instUID = img_seriesInstUID,
+                                  crawl_path = dicom_data_dict)
 
         img_slice = img_arr[slice_num]
         seg_slice = seg_arr[slice_num]
