@@ -8,7 +8,10 @@ import SimpleITK as sitk
 import numpy as np
 import matplotlib.pyplot as plt
 import itertools
+import re
+import datetime
 
+from datetime import date
 from damply import dirs
 from pathlib import Path
 
@@ -504,7 +507,109 @@ def organize_long_measures(patient_ID: str,
             tum_info = pd.concat([tum_info, curr_info_df])
     
     return tum_info
-    
+
+def convert_pydicom_to_dict(pydcm_dataset: pydicom.dataset.Dataset):
+    '''
+    Recursively converts a pydicom dataset into a nested dictionary for easier search capabilities later on. 
+    Function gotten from https://github.com/pydicom/pydicom/issues/319
+
+    Parameters
+    ----------
+    pydcm_dataset: pydicom.dataset.Dataset 
+        A structured report DICOM that has been converted into a pydicom dataset object
+
+    Returns
+    ----------
+    dcm_dict: dict
+        A Python dictionary with all DICOM information stored in it. Keys are the element value representations
+    '''
+    dcm_dict = dict() 
+    for element in pydcm_dataset: # Go through all element data listed in the dataset
+        if element.VR != "SQ": #If the element's value representation is not a sequence
+            dcm_dict[element.name] = str(element.value) #Store the DICOM header info with keys as element names
+        else: 
+            #Call function recursively for each element stored in the sequence
+            dcm_dict[element.name] = [convert_pydicom_to_dict(item) for item in element]
+        
+    return dcm_dict
+
+def get_dcm_tag_info(dicom_dict: dict, 
+                     dicom_tag: str, 
+                     curr_path: list = None, 
+                     dicom_value: str = None
+                    ): 
+    '''
+    Recursively searches for a specific DICOM tag using the inputed value representation and outputs the key-value pairs that have that information. 
+    Also gets the location in the dictionary at which those key-value pairs were found.  
+    Can begin from the root or from a specific node of the structure. Option to only find keys with a specific value. 
+
+    Parameters
+    ----------
+    dicom_dict: dict
+        A dictionary with all DICOM information stored in it. Keys are element value representations. 
+    dicom_tag: str
+        The DICOM tag you are trying to search for. Expects capitalization and spacing.
+    curr_path: list
+        The path to a specific part of the nested dictionary stored in a list. To be used in recursion. 
+        Leave this as None when initially calling function. Subset dictionary first if you don't want to look through all of it. 
+    dicom_value: str
+        Option to only return keys with a specific value inputted here.
+
+    Returns
+    ----------
+    key_val_loc: list
+        A list containing the searched DICOM tag, the values associated with that term, and the location at which it was found in the dictionary.
+    '''
+
+    if curr_path is None: 
+        curr_path = []
+
+    # Check if value is a list (this is for multiple nested dictionaries found at the same node)
+    if isinstance(dicom_dict, list): 
+        for index, value in enumerate(dicom_dict): 
+            new_path = list(curr_path)
+            new_path.append(index)
+
+            for found_tag in get_dcm_tag_info(value, 
+                                                dicom_tag, 
+                                                curr_path = new_path, 
+                                                dicom_value = dicom_value): 
+                if dicom_value is not None: 
+                    #Check if the current tag's value matches the one inputted 
+                    if found_tag[1] == dicom_value: 
+                        yield found_tag
+                    else: 
+                        continue
+                else: 
+                    #Entering here --> output all found matches for the inputted DICOM tag
+                    yield found_tag
+
+    # Check if value is a dictionary 
+    if isinstance(dicom_dict, dict): 
+        for key, value in dicom_dict.items():
+            new_path = list(curr_path)
+            new_path.append(key)
+            for found_tag in get_dcm_tag_info(value, 
+                                                dicom_tag, 
+                                                curr_path = new_path,
+                                                dicom_value = dicom_value): 
+                yield found_tag
+
+            if key == dicom_tag: 
+                new_path = list(curr_path)
+                new_path.append(key)
+                key_val = [key, value, new_path] #Output the search term, value found in correspondance to that term, and the location it was found at
+
+                if dicom_value is not None: 
+                    #Check if the current tag's value matches the one inputted 
+                    if key_val[1] == dicom_value: 
+                        yield key_val
+                    else: 
+                        continue
+                else: 
+                    #Entering here --> output all found matches for the inputted DICOM tag
+                    yield key_val
+
 def get_ann_measurements(ann_dicom_file_path: Path): 
     '''
     Scrapes the raw annotation DICOM file for information relating to long axis measurements. Logs all possible measurements. 
@@ -827,34 +932,153 @@ def get_nifti_locs(nifti_idx_path: Path,
     
     return img_niftis, seg_niftis
 
-def get_slice_num(inst_slice: str, 
-                  num_of_slices: int): 
+def get_space_origin(nifti_idx_path: Path,
+                     img_loc: str):
+    '''
+    Given a subset of imaging and segmentation location information and the nifti index path from med-imagetools, get the corresponding spacing
+    and origin information. Assumes that the nifti files got processed without errors (aka they exist in the index file)
+
+    Parameters
+    ----------
+    nifti_idx_path: Path
+        Path to the nifti-associated index file created after processing by med-imagetools
+    img_loc: str
+        The location of the imaging nifti file. To be used to subset the index data
+
+    Returns
+    ----------
+    spacing: list 
+        The spacing of the image in [x, y, slice] form
+    origin: list 
+        The origin point for the image
+    ''' 
+    img_loc = "/".join(str(img_loc).split('/')[-3:]) #Get only the part of the image location that is found in the med-imagetools index
+    nifti_idx_df = pd.read_csv(nifti_idx_path) #Read in nifti index info to get the corresponding nifti filenames and relative paths
+
+    #Get subset of the nifti index path based on the given nifti image location 
+    img_idx_info = nifti_idx_df[nifti_idx_df['filepath'] == img_loc]
+
+    #Get pixel spacing and slice thickness information 
+    pixel_space_str = img_idx_info['PixelSpacing'].iloc[0]
+    pixel_space_no_bracket = re.sub(r'\[|\]', '', pixel_space_str)
+    pixel_space = pixel_space_no_bracket.split(',')
+
+    slice_thickness = img_idx_info['SliceThickness'].iloc[0]
+
+    spacing = [float(pixel_space[0]), float(pixel_space[1]), float(slice_thickness)]
+
+    #Get origin information into list form 
+    origin_info = img_idx_info['origin'].iloc[0]
+    origin_no_par = re.sub('[()]', '', origin_info) #Remove parentheses 
+    origin = origin_no_par.split(',') #Split string by comma to make list of origin coordinates
+    origin = [float(i) for i in origin]
+    return spacing, origin
+
+# #Depricated version of the function, this was one slice off.
+# def get_slice_num(inst_slice: str, 
+#                   num_of_slices: int): 
+#     '''
+#     Gets the slice number of based on an instances value from a given referencedSOPUID and then matches it to the order of the nifti slices.
+
+#     Parameters
+#     ----------
+#     inst_slice: str
+#         Reference of the dicom slice file
+#     num_of_slices: int 
+#         Number of slices that are in the whole image
+#     Returns 
+#     ----------
+#     slice_num 
+#         The slice number aligned with the nifti slices
+#     '''
+
+#     subseries_slice = inst_slice.split(".")[0] #Takes the name of the DICOM instance and removes the ".dcm" at the end
+#     dicom_slice = int(subseries_slice.split("-")[-1]) #Gets the slice number from the name of the DICOM instance. See devnotes_kaitlyn.md for more.
+
+#     slice_num = num_of_slices - dicom_slice + 1 #See devnotes_kaitlyn.md for breakdown of this calculation. 
+    
+#     return slice_num 
+
+def get_nested_dict(info_dict: dict, 
+                    keys: list): 
+    '''
+    From a dictionary, navigate to the desired depth using a list of keys. Does not require that the depths are invariable. 
+
+    Parameters 
+    ----------
+    info_dict: dict 
+        The dictionary you are searching through 
+    keys: list
+        A list of keys in order of appearance that correspond to the location in the dicitonary you would like to navigate to
+    
+    Returns
+    ----------
+    requested_dict: dict 
+        The nested dictionary found at the requested location
+    '''
+    #Go through all keys until the nested dictionary is found 
+    curr_depth = info_dict
+    for key in keys: 
+        if isinstance(curr_depth, dict) and key in curr_depth: #Check if the current location holds a dictionary and if the key is found within it
+            curr_depth = curr_depth[key] #Go down in depth by one key 
+        else: 
+            raise KeyError("The pathway that you entered is not traversable in the dictionary provided. Please check.")
+    
+    requested_dict = curr_depth
+
+    return requested_dict
+
+def get_slice_num(slice_SOPUID: str, 
+                  img_ser_instUID: str,
+                  crawl_dict: dict): 
     '''
     Gets the slice number of based on an instances value from a given referencedSOPUID and then matches it to the order of the nifti slices.
 
     Parameters
     ----------
-    inst_slice: str
-        Reference of the dicom slice file
-    num_of_slices: int 
-        Number of slices that are in the whole image
+    slice_SOPUID: str
+        The slice SOPUID that was in reference to a structured report's measurement
+    img_ser_instUID: str
+        The image's SOPUID that the measurement is in reference to
+    crawl_dict: dict 
+        Contains all crawl_db.json file produced by med-imagetools
+
     Returns 
     ----------
     slice_num 
         The slice number aligned with the nifti slices
     '''
 
-    subseries_slice = inst_slice.split(".")[0] #Takes the name of the DICOM instance and removes the ".dcm" at the end
-    dicom_slice = int(subseries_slice.split("-")[-1]) #Gets the slice number from the name of the DICOM instance. See devnotes_kaitlyn.md for more.
-
-    slice_num = num_of_slices - dicom_slice + 1 #See devnotes_kaitlyn.md for breakdown of this calculation. 
+    #See if the crawl has the imaging data and if not, no slice info can be gotten for this patient. No image available to match the annotation. 
+    try: 
+        img_dict = crawl_dict[img_ser_instUID]
+    except KeyError: 
+        logger.debug("Image with Series Instance UID: %s is not present in the crawl file. Please check if this file got successfully converted or if it existed.", img_ser_instUID)
+        return None
     
+    inst_list = get_dcm_tag_info(dicom_dict = img_dict, 
+                                 dicom_tag = 'instances')
+    
+    #Go through all possible locations for the instances dictionary (containing all slice names) and find the one with the referenced slice
+    for key_val_location in inst_list:
+        curr_loc = key_val_location[2] #Index 2 is where all location data is kept 
+        curr_inst_dict = get_nested_dict(info_dict = img_dict, 
+                                         keys = curr_loc) #Navigate to the appropriate nested dictionary
+        
+        if slice_SOPUID in curr_inst_dict.keys(): 
+            dcm_filename = curr_inst_dict[slice_SOPUID] #Get the DICOM file name associated with the referenced slice
+            #Get the DICOM slice number assuming that the DICOM filename is structured as "[subseries_num]-[slice_number].dcm"
+            subseries_slice = dcm_filename.split(".")[0] #Takes the name of the DICOM instance and removes the ".dcm" at the end
+            dicom_slice = int(subseries_slice.split("-")[-1]) #Gets the slice number from the name of the DICOM instance. Some files don't have the subseries in front, but this check shouldn't mess anything up with that.
+            num_of_slices = len(curr_inst_dict) #Get number of slices; equivalent to the number of items in the instances dictionary
+            slice_num = num_of_slices - dicom_slice #Calculates the slice number from the information given
+
     return slice_num 
 
 def plot_img_seg_ann(tum_info: pd.Series,
                      img_slice: np.array,
                      seg_slice: np.array, 
-                     save_path: Path = Path(dirs.RESULTS / 'visualization/annotation_seg_matching')): 
+                     save_path: Path): 
     '''
     Plots the annotation measured axes and the intersection point on the corresponding segmentation overlaying the image slice. 
 
@@ -958,10 +1182,10 @@ def confirm_ann_seg_match(tum_info_df: pd.DataFrame,
     for idx, row in tum_info_df.iterrows(): 
         #Find the corresponding
         img_seriesInstUID = row["AnnReferencedSeriesUID"] 
-        number_of_slices = img_slice_num
-        img_slice_dicom = dicom_data_dict[img_seriesInstUID][image_subseries]["instances"][row["LongAxisRefSOPUID"]] #Get the slice instance name based on the referenced slice ID.
-        
-        slice_num = get_slice_num(img_slice_dicom, number_of_slices)
+        ann_sliceSOPUID = row["LongAxisRefSOPUID"]
+        slice_num = get_slice_num(slice_SOPUID = ann_sliceSOPUID, 
+                                  img_ser_instUID = img_seriesInstUID,
+                                  crawl_dict = dicom_data_dict)
 
         img_slice = img_arr[slice_num]
         seg_slice = seg_arr[slice_num]
@@ -1072,7 +1296,11 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
             "AnnFilename", 
             "SegLocation", 
             "ImgNIFTILocation", 
-            "SegNIFTILocation"       
+            "SegNIFTILocation",
+            "ImgNIFTIShortLoc",
+            "SegNIFTIShortLoc", 
+            "ImgSpacing", 
+            "ImgOrigin"       
            ]
     
     #Initialize final dataframes
@@ -1192,6 +1420,10 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                             filename,
                             None,
                             None, 
+                            None,
+                            None,
+                            None,
+                            None,
                             None]
                 
                 no_match_df = pd.DataFrame([no_matched_info], columns = cols)
@@ -1258,6 +1490,10 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                                         filename,
                                         None,
                                         None,
+                                        None,
+                                        None,
+                                        None,
+                                        None, 
                                         None]
                             
                         no_match_df = pd.DataFrame([no_matched_info], columns = cols)
@@ -1277,6 +1513,9 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                             #Check if the current annotation's intersection of long and short axis is within the segmentation slice 
                             is_in_seg = confirm_ann_seg_match(measurement_df, img_loc, seg_loc, dicom_info_dict, img_subseries, img_out_path)
                             if is_in_seg: 
+                                img_spacing, img_origin = get_space_origin(nifti_idx_path = nifti_idx_path, 
+                                                                           img_loc = img_loc)
+                                
                                 matched_info = [ann_dicom_info["PatientID"], 
                                                 ann_dicom_info["StudyInstanceUID"], 
                                                 img_ann_info["ImgSeriesInstanceUID"].values[0], 
@@ -1303,7 +1542,11 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                                                 filename,
                                                 curr_seg_info["SegLocation"].values[0],
                                                 img_loc, #Image NIFTI path
-                                                seg_loc  #Segmentation NIFTI path
+                                                seg_loc,  #Segmentation NIFTI path
+                                                "/".join(str(img_loc).split("/")[-4:]), #Relative image NIFTI path
+                                                "/".join(str(seg_loc).split("/")[-4:]), #Relative segmentation NIFTI path
+                                                img_spacing, 
+                                                img_origin
                                             ]
                     
                                 match_info_df = pd.DataFrame([matched_info], columns = cols)
@@ -1339,6 +1582,10 @@ def match_ann_to_seg(match_ann_img_df: pd.DataFrame,
                                         filename,
                                         None,
                                         None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
                                         None]
                             
                                 no_match_df = pd.DataFrame([no_matched_info], columns = cols)
@@ -1360,9 +1607,6 @@ def run_matching(idx_nifti_file: str,
                  disease_site: str,
                  get_intermediate_dfs: bool
                  ): 
-    #Configure logger
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(filename = dirs.LOGS / Path("match_no_match_ann_img_seg_" + dataset_full_name + ".log"), encoding='utf-8', level=logging.DEBUG)
 
     #Set up default data paths 
     idx_dicom_path = dirs.RAWDATA / disease_site / dataset_full_name / Path(".imgtools/images/index.csv")
@@ -1372,6 +1616,10 @@ def run_matching(idx_nifti_file: str,
     out_path = dirs.PROCDATA / disease_site / dataset_full_name / "metadata/annotation_seg_matching"
     img_out_path = dirs.RESULTS / dataset_full_name / "visualization/annotation_seg_matching"
     
+    # Output initial logger info for the date, time and dataset used during this run 
+    curr_datetime = datetime.datetime.now()
+    curr_datetime_str = curr_datetime.strftime("%Y-%m-%d %H:%M:%S")
+    logger.info("Annotation-imaging-segmentation matching commencing for %s on %s", dataset_full_name, curr_datetime_str)
     index_df = pd.read_csv(idx_dicom_path) #Get the dicom index file read
 
     matched_ann_img_df = match_ann_to_image(index_df) #Run matching between annotations and images
@@ -1409,15 +1657,76 @@ def run_matching(idx_nifti_file: str,
         file.close()
     
 if __name__ == '__main__': 
+    #Configure logger
+    today = date.today()
+    today_str = today.strftime('%Y-%m-%d')
+
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(filename = dirs.LOGS / Path("match_no_match_ann_img_seg_" + today_str + ".log"), encoding='utf-8', level=logging.DEBUG)
     run_matching()
 
-    ## OLD CODE WITHOUT CLICK FUNCTIONALITY ##
-    # dataset = "TCIA_NSCLC-Radiogenomics"
+    # # FOR DEBUGGING #
+    # #Set up default data paths 
+    # disease_site = 'Abdomen'
+    # dataset_full_name = 'TCIA_CPTAC-CCRCC'
+    # idx_nifti_file = 'mit_CPTAC-CCRCC/mit_CPTAC-CCRCC_index.csv'
+    # get_intermediate_dfs = False
+
+    # #Configure logger
+    # logger = logging.getLogger(__name__)
+    # logging.basicConfig(filename = dirs.LOGS / Path("match_no_match_ann_img_seg_CPTAC-CCRCC_2025-11-11.log"), encoding='utf-8', level=logging.DEBUG)
+
+    # idx_dicom_path = dirs.RAWDATA / disease_site / dataset_full_name / Path(".imgtools/images/index.csv")
+    # idx_nifti_path = dirs.PROCDATA / disease_site / dataset_full_name / Path("images/" + idx_nifti_file)
+    # dicom_data_path = dirs.RAWDATA / disease_site / dataset_full_name / Path(".imgtools/images/crawl_db.json")
+    # ann_seg_data_path = dirs.RAWDATA / disease_site / dataset_full_name
+    # out_path = dirs.PROCDATA / disease_site / dataset_full_name / "metadata/annotation_seg_matching"
+    # img_out_path = dirs.RESULTS / dataset_full_name / "visualization/annotation_seg_matching"
+    
+    # index_df = pd.read_csv(idx_dicom_path) #Get the dicom index file read
+
+    # matched_ann_img_df = match_ann_to_image(index_df) #Run matching between annotations and images
+
+    # matched_img_seg_df = match_img_to_seg(index_df, matched_ann_img_df) #Run matching for images and segmentations based on the subset of images that had annotations
+
+    # #Make directories
+    # if not out_path.exists():
+    #     Path(out_path).mkdir(parents=True, exist_ok = True)
+
+    # if not img_out_path.exists(): 
+    #     Path(img_out_path).mkdir(parents=True, exist_ok = True)
+
+    # #Output the intermediate matching files if requested
+    # if get_intermediate_dfs: 
+    #     matched_ann_img_df.to_csv(out_path / "matching_ann_to_img.csv", index = False)
+    #     matched_img_seg_df.to_csv(out_path / "matching_img_to_seg.csv", index = False)
+
+    # with open(dicom_data_path, 'r') as file: 
+    #     dicom_data_json = file.read()
+    #     dicom_data_dict = json.loads(dicom_data_json) #Load in crawl_db.json file for annotation to segmentation matching
+
+    #     #Get dataframes of patients that did and did not have confirmed matches
+    #     matched_ann_seg, no_match_ann_seg = match_ann_to_seg(match_ann_img_df = matched_ann_img_df, 
+    #                                                          match_img_seg_df = matched_img_seg_df, 
+    #                                                          dicom_info_dict = dicom_data_dict, 
+    #                                                          nifti_idx_path = idx_nifti_path, 
+    #                                                          ann_seg_dicom_path = ann_seg_data_path, 
+    #                                                          img_out_path = img_out_path)
+        
+    #     #Output match and no match dataframes to csv
+    #     matched_ann_seg.to_csv(out_path / "matching_ann_to_seg.csv", index = False)
+    #     no_match_ann_seg.to_csv(out_path / "no_matching_ann_to_seg.csv", index = False)
+
+    #     file.close()
+
+
+    # OLD CODE WITHOUT CLICK FUNCTIONALITY ##
+    # dataset = "TCIA_CPTAC-CCRCC"
     # dataset_short = dataset.split("_")[-1]
-    # area = "Lung"
+    # area = "Abdomen"
 
     # logger = logging.getLogger(__name__)
-    # logging.basicConfig(filename = dirs.LOGS / Path("match_no_match_ann_img_seg_" + dataset + ".log"), encoding='utf-8', level=logging.DEBUG)
+    # logging.basicConfig(filename = dirs.LOGS / Path("match_no_match_ann_img_seg_" + dataset + "1.log"), encoding='utf-8', level=logging.DEBUG)
     
     # idx_dicom_path = dirs.RAWDATA / area / dataset / Path(".imgtools/images/index.csv")
     # idx_nifti_path = dirs.PROCDATA / area / dataset / Path("images/mit_" + dataset_short + "/mit_" + dataset_short + "_index.csv")
