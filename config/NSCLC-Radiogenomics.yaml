@@ -1,0 +1,10 @@
+DATA_SOURCE: "TCIA"
+DATASET_NAME: "NSCLC-Radiogenomics"
+
+### MED-IMAGETOOLS settings
+MIT:
+    MODALITIES: 
+        image: CT
+        mask: RTSTRUCT
+    ROI_STRATEGY: SEPARATE
+    ROI_MATCH_MAP: GTV:.*

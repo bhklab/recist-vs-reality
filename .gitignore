@@ -175,3 +175,6 @@ logs
 
 # Snakemake
 .snakemake
+
+# VS Code
+.vscode

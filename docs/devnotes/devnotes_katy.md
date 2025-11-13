@@ -6,6 +6,10 @@
 * SR's can be read by MIT index, but it looks like at least the CCC HNSCC ones don't have a ReferenceSeriesUID
 * From Caryn's `sr_testing.py` script, there is a ReferencedSOPInstanceUID, which means we can determine the slice, just gotta figure out in what CT
 
+#### [2025-06-11]
+* All the SRs we're using are Enhanced Structured Reports
+* Trying to use imgtools SR reader to extract metadata
+
 
 ## Data Notes
 | **CPTAC-HNSCC** | |
