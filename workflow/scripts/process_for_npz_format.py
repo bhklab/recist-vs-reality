@@ -160,6 +160,7 @@ def create_npzs(curr_data: pd.DataFrame,
                                             slice_number = slice_num, 
                                             img_size = curr_img_array.shape)
 
+    # Create unique save path
     counter = 0
     full_save_path = save_path / Path(save_name + "_" + str(counter) + ".npz")
     while full_save_path.exists():
@@ -202,6 +203,10 @@ def run_npz_create(dataset: str,
                                                bbox_data = bbox_df)
     
     save_path = dirs.PROCDATA / Path(disease_site + "/" + dataset) / 'images/npz_' + dataset
+
+    #Make sure that the save path exists 
+    if not save_path.exists(): 
+        Path(save_path).mkdir(parents = True, exist_ok = True)
 
     Parallel(n_jobs = jobs)(delayed(create_npzs)
                             (curr_data = curr_data, 
