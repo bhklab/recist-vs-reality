@@ -160,6 +160,11 @@ def create_npzs(curr_data: pd.DataFrame,
                                             slice_number = slice_num, 
                                             img_size = curr_img_array.shape)
 
+    # Check if the annotation has at least 5 pixels involved (see devnotes_kaitlyn.md for more information)
+    recist_pixel_num = np.count_nonzero(recist_ann_arr) 
+    if recist_pixel_num < 5: 
+        return 0 # Do not export information to .npz format if the RECIST line has less than 5 pixels involved in it
+    
     # Create unique save path
     counter = 0
     full_save_path = save_path / Path(save_name + "_" + str(counter) + ".npz")
@@ -202,7 +207,7 @@ def run_npz_create(dataset: str,
     combined_data_df = combine_bbox_match_data(matched_data = matched_df, 
                                                bbox_data = bbox_df)
     
-    save_path = dirs.PROCDATA / Path(disease_site + "/" + dataset) / 'images/npz_' + dataset
+    save_path = dirs.PROCDATA / Path(disease_site + "/" + dataset) / Path('images/npz_' + dataset)
 
     #Make sure that the save path exists 
     if not save_path.exists(): 
