@@ -1,3 +1,4 @@
+import click
 import numpy as np 
 import pandas as pd
 
@@ -5,9 +6,13 @@ from pathlib import Path
 from evaluate import Evaluator 
 from damply import dirs
 
+@click.command()
+@click.argument('dataset', type=click.STRING)
+@click.argument('disease_site', type=click.STRING)
+@click.argument('model', type=click.STRING)
 def compile_metrics(dataset: str, 
-                    disease_site: str, 
-                    save_path: Path): 
+                    disease_site: str,
+                    model: str): 
     '''
     Calculate performance metrics of all generated segmentations from MedSAM2-RECIST models. Results must
     be in .npz format with the following keys: segs, gts, boxes, spacing. If those are not in found in the results,
@@ -19,10 +24,15 @@ def compile_metrics(dataset: str,
         The full name of the dataset that was processed and predicted on (e.g. TCIA_CPTAC-CCRCC)
     disease_site: str
         Where the disease is located anatomically (e.g. Abdomen).  
-    save_path: Path
-        Where to save the final dataframe containing all prediction evaluations for a given dataset
+    model: str
+        The model name used for predictions (e.g. MedSAM2-RECIST)
     '''
-    results_path = dirs.RESULTS / Path(dataset) / Path('predictions')
+    results_path = dirs.RESULTS / model / disease_site / dataset / 'predictions'
+
+    save_path = dirs.RESULTS / model / disease_site / dataset / "metric_eval"
+    # Check if save path exists
+    if not save_path.exists(): 
+        save_path.mkdir(parents = True, exist_ok = True)
 
     # Loop over all of the data within specified folder 
     for folder in results_path.iterdir(): 
@@ -41,7 +51,7 @@ def compile_metrics(dataset: str,
                 grd_truth_seg = seg_model_result['gts'] #Some models (like the non-efficient MedSAM2-RECIST) may not have this so need a check
             except KeyError: 
                 curr_filename = str(file).split('/')[-1]
-                input_file = dirs.PROCDATA / Path(disease_site) / Path(dataset) / Path('images/npz_' + dataset) / Path(curr_filename) #Get data from input if not found
+                input_file = dirs.PROCDATA / disease_site / dataset / f"images/npz_{dataset}" / curr_filename #Get data from input if not found
                 input_data = np.load(input_file)
                 grd_truth_seg = input_data['gts']
                 del input_data #Free space
@@ -72,20 +82,19 @@ def compile_metrics(dataset: str,
             else: 
                 all_metrics_df = pd.concat([all_metrics_df, curr_metric_df], ignore_index = True).reset_index(drop = True) 
             
-            # Check if save path exists
-            if not save_path.exists(): 
-                save_path.mkdir(parents = True, exist_ok = True)
-
             save_name = save_path / "medsam2recist_seg_eval.csv"
 
             all_metrics_df.to_csv(save_name)
 
 if __name__ == '__main__': 
-    dataset = 'TCIA_CPTAC-CCRCC'
-    disease_site = 'Abdomen'
-    save_path = dirs.RESULTS / Path('TCIA_CPTAC-CCRCC/metric_eval')
-    compile_metrics(dataset = dataset, 
-                    disease_site = disease_site, 
-                    save_path = save_path)
+    compile_metrics()
+
+    # dataset = 'HEAD-NECK-RADIOMICS-HN1'
+    # disease_site = 'HeadNeck'
+    # model = "MedSAM2-RECIST"
+    
+    # compile_metrics(dataset = dataset, 
+    #                 disease_site = disease_site, 
+    #                 model = model)
     
         
