@@ -108,8 +108,9 @@ def combine_bbox_match_data(matched_data: pd.DataFrame,
 
     return match_bbox_data
 
-def create_npzs(curr_data: pd.DataFrame, 
-                save_path: Path, 
+def create_npzs(dataset: str, 
+                disease_site: str, 
+                curr_data: str,
                 window_width: int = None, 
                 window_level: int = None):
     '''
@@ -117,22 +118,26 @@ def create_npzs(curr_data: pd.DataFrame,
 
     Parameters
     ----------
+    dataset: str
+        The full name of the dataset as it appears in the folder name (e.g. TCIA_CPTAC-CCRCC)
+    disease_site: str
+        Where the disease is located for a given dataset, appearing the same way it does in the folder name (e.g. Abdomen)
     curr_data: pd.DataFrame
         Contains all matched bounding box and annotation-image-segmentation data for a given row
-    save_path: Path
-        Where you want the .npz files to save to 
     window_width: int 
         The width of the windowing interval. 
     window_level: int
         Where you want the windowing interval to be centered. 
     ''' 
+
+    save_path = dirs.PROCDATA / Path(disease_site + "/" + dataset) / Path('images/npz_' + dataset)
     # Create and export npz 
     if not save_path.exists(): 
         Path(save_path).mkdir(parents = True, exist_ok = True)
 
     #Get all other information found in the matched bbox dataframe that is necessary for .npz file creation 
-    img_file = dirs.PROCDATA / Path('Abdomen/TCIA_CPTAC-CCRCC/images') / curr_data['ImgNIFTIShortLoc']
-    seg_file = dirs.PROCDATA / Path('Abdomen/TCIA_CPTAC-CCRCC/images') / curr_data['SegNIFTIShortLoc']
+    img_file = dirs.PROCDATA / Path(disease_site) / Path(dataset) / Path('images') / curr_data['ImgNIFTIShortLoc']
+    seg_file = dirs.PROCDATA / Path(disease_site) / Path(dataset) / Path('images') / curr_data['SegNIFTIShortLoc']
     bbox = np.array(ast.literal_eval(curr_data['BoundingBox']))
     slice_num = curr_data['NIFTISliceBBox']
     save_name = "_".join(str(curr_data['SegNIFTIShortLoc']).split("/")[-3:-1]) # Gets the med-imagetools unique file name from the total path. 
@@ -206,16 +211,11 @@ def run_npz_create(dataset: str,
 
     combined_data_df = combine_bbox_match_data(matched_data = matched_df, 
                                                bbox_data = bbox_df)
-    
-    save_path = dirs.PROCDATA / Path(disease_site + "/" + dataset) / Path('images/npz_' + dataset)
-
-    #Make sure that the save path exists 
-    if not save_path.exists(): 
-        Path(save_path).mkdir(parents = True, exist_ok = True)
 
     Parallel(n_jobs = jobs)(delayed(create_npzs)
-                            (curr_data = curr_data, 
-                             save_path = save_path, 
+                            (dataset = dataset, 
+                             disease_site = disease_site, 
+                             curr_data = curr_data, 
                              window_level = 40, 
                              window_width = 350)
                              for _, curr_data in tqdm(combined_data_df.iterrows(), total = combined_data_df.shape[0]))
