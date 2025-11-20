@@ -2,9 +2,9 @@
 
 ## Annotation-Imaging-Segmentation Matching 
 
-### Additional Function Documentation (Last Updated [2025-09-17])
+### Additional Function Documentation (Last Updated [2025-11-13])
 
-#### get_ann_measurements()
+#### get_ann_measurements() 
 
 The DICOM data extracted through `pydicom.dcmread` is in a similar structure to nested dictionaries. Basic information (PatientID, annotation ID, etc.) can be found from the outer dictionary. The reference imaging information is found within the Current Requested Procedure Evidence Sequence one level down from the outer dictionary. 
 
@@ -29,4 +29,10 @@ Once inside the Referenced Frame of Reference Sequence, the RT Referenced Study 
 
 The instance name of the slice being referenced usually is in the form of "subseries_num-slice_num.dcm" (e.g. 1-001.dcm). At this stage, only the slice that was referenced in an annotation will be passed into this function. To get the slice number, the instance name first gets split by "." to remove the extention and then gets split by "-" to remove the subseries. 
 
-The nifti files are ordered backwards compared to the DICOM slices and they differ by having a starting index of 0 instead of 1. To make sure the correct nifti slice is selected for the measurement and segmentation, the found slice number gets subtracted from the total number of slices to get the position of the desired nifti slice. Then we add 1 to offset the difference in index. 
+The nifti files are ordered backwards compared to the DICOM slices and they differ by having a starting index of 0 instead of 1. To make sure the correct nifti slice is selected for the measurement and segmentation, the found slice number gets subtracted from the total number of slices to get the position of the desired nifti slice. 
+
+## Preprocessing for MedSAM2-RECIST 
+### Additional Function Documentation (Last Updated [2025-11-13])
+
+#### create_npzs()
+The MedSam2-RECIST model requires that at there at least be 5 points to be sampled from the RECIST annotation. That means that if there are less than 5 pixels involved in the annotation, an error will be produced and the run will stop. Therefore, a theshold of 5 pixels is used to see if the data should be exported to .npz format. 
