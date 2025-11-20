@@ -12,7 +12,7 @@ np.random.seed(10)
 
 # recist_class_flip_bool = np.random.choice(a=[False, True], size=N, p=[0.3, 0.7])
 
-dataset = "TCIA_CPTAC-PDA"
+dataset = "TCIA_NSCLC-Radiogenomics"
 
 results_df = pd.read_csv(dirs.RESULTS / "POETPresentation" / f"indiv_{dataset}_results.csv", index_col=0)
 
@@ -65,10 +65,10 @@ colors = ['red', 'green', 'blue', 'cyan', 'magenta', 'orange', 'purple', 'black'
 
 fig.suptitle(dataset)
 for idx, metric in enumerate(metrics):
-    ax3[idx].scatter(results_df['T0VoxVol'], results_df[metric], c=colors[idx])
-    ax3[idx].set_title(metric)
-    ax3[idx].set_ylabel(f"{metric} vs. Ground Truth Volume")
-    ax3[idx].set_xlabel('Ground Truth Voxel Volume')
+    ax3[idx].scatter(results_df[metric], results_df['T0VoxVol'], c=colors[idx] )
+    ax3[idx].set_title(f"{metric} vs. Ground Truth Volume")
+    ax3[idx].set_xlabel(metric)
+    ax3[idx].set_ylabel('Ground Truth Voxel Volume')
 
 plt.savefig(out_dir / "metrics_v_volume.png")
 
