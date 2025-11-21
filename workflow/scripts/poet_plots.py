@@ -50,41 +50,41 @@ out_dir.mkdir(parents=True, exist_ok=True)
 
 
 # ##### RECIST PLOTS ##### 
-# ccrcc_metrics = pd.read_csv('/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/medsam2recist_seg_eval_ccrcc_recist.csv')
-# hn1_metrics = pd.read_csv('/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/medsam2recist_seg_eval_hn1.csv')
-# nsclc_metrics = pd.read_csv('/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/medsam2recist_seg_eval_nsclcradgen_recist.csv')
-# edge_colors = ['red', 'blue', 'purple']
-# colors = ['lightcoral', 'lightblue', 'lightpink']
-# vp_recist = plt.violinplot(dataset = [ccrcc_metrics['volume_dice'],
-#                          hn1_metrics['volume_dice'], 
-#                          nsclc_metrics['volume_dice']], 
-#                          showmedians = True)
-# for i, body in enumerate(vp_recist['bodies']): 
-#     body.set_facecolor(colors[i])
-#     body.set_edgecolor(edge_colors[i])
+ccrcc_metrics = pd.read_csv('/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/medsam2recist_seg_eval_ccrcc_recist.csv')
+hn1_metrics = pd.read_csv('/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/medsam2recist_seg_eval_hn1.csv')
+nsclc_metrics = pd.read_csv('/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/medsam2recist_seg_eval_nsclcradgen_recist.csv')
+edge_colors = ['red', 'blue', 'purple']
+colors = ['lightcoral', 'lightblue', 'lightpink']
+vp_recist = plt.violinplot(dataset = [ccrcc_metrics['volume_dice'],
+                         hn1_metrics['volume_dice'], 
+                         nsclc_metrics['volume_dice']], 
+                         showextrema=False)
+for i, body in enumerate(vp_recist['bodies']): 
+    body.set_facecolor(colors[i])
+    body.set_edgecolor(edge_colors[i])
 
-# plt.ylabel('Volumetric Dice')
-# plt.xticks([1, 2, 3], ['CCRCC\n(n = 32)', 'CPTAC\n(n = 22)', 'NSCLC\n(n = 73)'])
-# plt.tight_layout()
-# plt.savefig(out_dir / 'recist_medsam2_dice_violin.png')
+plt.ylabel('Volumetric DICE')
+plt.xticks([1, 2, 3], ['CCRCC\n(n = 34)', 'PDA\n(n = 22)', 'NSCLC\n(n = 73)'])
+plt.tight_layout()
+plt.savefig(out_dir / 'recist_medsam2_dice_violin.png')
 
 # ##### HN1 RERECIST PLOTTING ###
-hn1_vols = pd.read_csv('/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/gts_vols_hn1.csv')
-hn1_evals = pd.read_csv('/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/medsam2recist_seg_eval_hn1.csv')
+# hn1_vols = pd.read_csv('/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/gts_vols_hn1.csv')
+# hn1_evals = pd.read_csv('/home/bhkuser/bhklab/kaitlyn/recist-vs-reality/medsam2recist_seg_eval_hn1.csv')
 
-hn1_evals = hn1_evals.rename(columns = {'filename': 'filenameLONG'})
-hn1_evals['filename'] = hn1_evals['filenameLONG'].apply(get_filename_hn1)
+# hn1_evals = hn1_evals.rename(columns = {'filename': 'filenameLONG'})
+# hn1_evals['filename'] = hn1_evals['filenameLONG'].apply(get_filename_hn1)
 
-hn1_total = pd.merge(hn1_vols, hn1_evals, on = 'filename', how = 'left')
+# hn1_total = pd.merge(hn1_vols, hn1_evals, on = 'filename', how = 'left')
 
-fig, ax = plt.subplots()
-fig.suptitle('Volumetric DICE Relationship with Ground Truth Volume\n HN1 (n = 137)')
-ax.scatter(hn1_total['T0VoxVol'], hn1_total['volume_dice'])
-ax.set_xlabel('Volume')
-ax.set_ylabel('Volumetric DICE')
-plt.tight_layout()
+# fig, ax = plt.subplots()
+# fig.suptitle('Volumetric DICE Relationship with Ground Truth Volume\n HN1 (n = 137)')
+# ax.scatter(hn1_total['T0VoxVol'], hn1_total['volume_dice'])
+# ax.set_xlabel('Volume')
+# ax.set_ylabel('Volumetric DICE')
+# plt.tight_layout()
 
-plt.savefig(out_dir / 'hn1_volume_vs_dice.png')
+# plt.savefig(out_dir / 'hn1_volume_vs_dice.png')
 
 # fig, ax = plt.subplots()
 # ax.violinplot(dataset = hn1_total['volume_dice'])
@@ -95,23 +95,23 @@ plt.savefig(out_dir / 'hn1_volume_vs_dice.png')
 # plt.tight_layout()
 # plt.savefig(out_dir / 'hn1_dice_violin.png')
 
-fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
-fig.suptitle('HN1 Performance (n = 137)')
-ax1.violinplot(dataset = hn1_total['volume_dice'])
-ax1.set_ylabel('Volumetric DICE') 
-ax1.tick_params(labelbottom = False)
-ax1.set_xticks([])
-ax2.violinplot(dataset = hn1_total['hausdorff'])
-ax2.set_ylabel('Hausdorff Distance')
-ax2.tick_params(labelbottom = False)    
-ax2.set_xticks([])
-ax3.violinplot(dataset = hn1_total['added_path_length'])
-ax3.set_ylabel('Added Path Length')
-ax3.tick_params(labelbottom = False)
-ax3.set_xticks([])
+# fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+# fig.suptitle('HN1 Performance (n = 137)')
+# ax1.violinplot(dataset = hn1_total['volume_dice'])
+# ax1.set_ylabel('Volumetric DICE') 
+# ax1.tick_params(labelbottom = False)
+# ax1.set_xticks([])
+# ax2.violinplot(dataset = hn1_total['hausdorff'])
+# ax2.set_ylabel('Hausdorff Distance')
+# ax2.tick_params(labelbottom = False)    
+# ax2.set_xticks([])
+# ax3.violinplot(dataset = hn1_total['added_path_length'])
+# ax3.set_ylabel('Added Path Length')
+# ax3.tick_params(labelbottom = False)
+# ax3.set_xticks([])
 
-plt.tight_layout()
-plt.savefig(out_dir / "test_hn1_violin_all.png")
+# plt.tight_layout()
+# plt.savefig(out_dir / "test_hn1_violin_all.png")
 
 ##### SIM DATA #####
 
@@ -197,28 +197,33 @@ misclass_num = []
 correct_num = []
 for bin_cat in test['binned_RECIST'].astype(str).unique(): 
     #Subset dataframe 
+    print(bin_cat)
     curr_bin = test[test['binned_RECIST'] == bin_cat]
     total_count = curr_bin.shape[0] 
     misclassified = curr_bin[curr_bin['same_RECIST'] == False]
     misclass_count = misclassified.shape[0] 
+    misclass_perc = misclass_count / total_count * 100
     correct = curr_bin[curr_bin['same_RECIST'] == True].shape[0]
-    misclass_num.append(misclass_count) 
-    correct_num.append(correct)
+    correct_perc = correct / total_count * 100
+    misclass_num.append(misclass_perc) 
+    correct_num.append(correct_perc)
 
 # plt.hist([all_dataset['binned_RECIST'], all_dataset['same_RECIST']], bins = 10, stacked = True, color = ['r', 'b'])
 
 # plt.savefit('hist_all_data_misclassify.png')
-fig, ax = plt.subplots()
+fig, ax = plt.subplots(figsize=(8,6))
 fig.suptitle('Proportions of Misclassified RECIST Categories\n(n = 824)')
-x = ['(0.0, 0.1]', '(0.1, 0.2]', '(0.2, 0.3]', '(0.3, 0.4]', '(0.4, 0.5]', '(0.5, 0.6]', '(0.6, 0.7]', '(0.7, 0.8]', '(0.8, 0.9]', '(0.9, 1.0]']
-ax.bar(x, misclass_num, color='r')
-ax.bar(x, correct_num, bottom = misclass_num, color = 'b')
+x = ['(0.0, 0.1]', '(0.1, 0.2]', '(0.2, 0.3]', '(0.3, 0.4]', '(0.4, 0.5]', '(0.5, 0.6]', '(0.6, 0.7]', '(0.7, 0.8]', '(0.8, 1.0]']
+misclass_num[8] = 8.6419753086
+correct_num[8] = 91.35802469
+ax.bar(x, misclass_num[:9], color='r')
+ax.bar(x, correct_num[:9], bottom = misclass_num[:9], color = 'b')
 ax.set_xlabel('Binned DICE Score') 
-ax.set_ylabel('Number of Tumours Classified')
+ax.set_ylabel('Classification Proportion (%)')
 ax.tick_params(axis='x', labelrotation=45)
-ax.legend(["False", "True"], title = 'Correctly Classified')
+ax.legend(["False", "True"], title = 'Correctly Classified', loc='center left', bbox_to_anchor=(1, 0.5))
 plt.tight_layout()
-plt.savefig(out_dir / "test_binned_RECIST_prop_all.png")
+plt.savefig(out_dir / "test_binned_RECIST_prop_all2.png")
 
 #Stacked bar chart 
 
