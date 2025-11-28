@@ -1,10 +1,10 @@
 # RECIST vs Reality
 
-**Authors:** [Caryn Geady](https://github.com/caryn-geady), [Katy Scott](https://github.com/strixy16)
+**Authors:** [Caryn Geady](https://github.com/caryn-geady), [Katy Scott](https://github.com/strixy16), [Kaitlyn Kobayashi](https://github.com/kaitlyn-kobayashi)
 
-**Contact:** [bhklab.caryngeady@gmail.com](mailto:bhklab.caryngeady@gmail.com)
+**Contact:** [bhklab.katyscott@gmail.com](mailto:bhklab.katyscott@gmail.com)
 
-**Description:** Code for RECIST to Reality manuscript.
+**Description:** Development of the AI-Augmented Response Assessment (AAuRA) pipeline.
 
 --------------------------------------
 
