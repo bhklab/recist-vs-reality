@@ -2,6 +2,7 @@ import SimpleITK as sitk
 import numpy as np
 from pathlib import Path
 import pandas as pd
+from skimage.measure import regionprops 
 from skimage.draw import line
 from joblib import Parallel, delayed
 import click
@@ -93,10 +94,24 @@ def mask2D_to_bbox(gt2D:np.array,
                    spacing:np.array = None
                    ) -> np.array:
     try:
-        y_indices, x_indices = np.where(gt2D > 0)
-        x_min, x_max = np.min(x_indices), np.max(x_indices)
-        y_min, y_max = np.min(y_indices), np.max(y_indices)
-        boxes = np.array([x_min, y_min, x_max, y_max])
+        ## Old code 
+        # y_indices, x_indices = np.where(gt2D > 0)
+        # x_min, x_max = np.min(x_indices), np.max(x_indices)
+        # y_min, y_max = np.min(y_indices), np.max(y_indices)
+        # boxes = np.array([x_min, y_min, x_max, y_max])
+
+        props = regionprops(gt2D)[0]
+        y_cent, x_cent = props.centroid
+        orientation = props.orientation
+        semi_maj_axis_len = props.major_axis_length / 2
+
+        x_start = x_cent - np.sin(orientation) * semi_maj_axis_len
+        y_start = y_cent - np.cos(orientation) * semi_maj_axis_len
+
+        x_end = x_cent + np.sin(orientation) * semi_maj_axis_len
+        y_end = y_cent + np.cos(orientation) * semi_maj_axis_len
+
+        boxes = np.array([x_start, y_start, x_end, y_end])
 
         if padding:
             boxes = pad_bbox(box = boxes,
