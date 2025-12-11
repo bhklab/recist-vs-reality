@@ -26,7 +26,7 @@ env.SCRIPTS = "${PIXI_PROJECT_ROOT}/workflow/scripts"
 [dependencies]
 python = ">=3.12"
 ipython = "*"
-ipykernel = "*"
+ipykernel = ">=7.1.0,<8"
 jupyterlab = "*"
 pip = "*"
 pydicom = ">=3.0.1,<4"
