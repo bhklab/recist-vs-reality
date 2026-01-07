@@ -6,6 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+# IO extensions 
+*.png 
+*.csv
+*.nii.gz
+*.npz
+
 # Distribution / packaging
 .Python
 build/
