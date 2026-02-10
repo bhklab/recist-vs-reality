@@ -1,17 +1,18 @@
 import SimpleITK as sitk
 import numpy as np
-import math
 import logging
 import datetime
 import pandas as pd
 import random 
 import click 
 
+from tqdm import tqdm
+from joblib import Parallel, delayed
 from pathlib import Path
-from skimage.morphology import binary_erosion, binary_dilation, ball
 from scipy import ndimage as ndi
 from skimage.measure import regionprops, label
 from damply import dirs
+from imgtools.transforms.functional import resample 
 
 def get_vox_vol(mask_array: np.ndarray, unitary_vol: float):
 	"""
@@ -76,7 +77,10 @@ def get_major_axis(mid_slice: np.ndarray):
 	'''
 	# Get region properties 
 	region_info = regionprops(mid_slice.astype(int)) 
-	maj_axis_len = region_info[0].axis_major_length
+	try: 
+		maj_axis_len = region_info[0].axis_major_length
+	except IndexError: 
+		return 0 #If for whatever reason there is no region information available (because the mask is empty and a previous catch didn't get it)
 
 	return maj_axis_len
 
@@ -89,9 +93,8 @@ def make_post_mask(mask_array: np.ndarray,
 	Parameters
 	----------
 	mask_array: np.ndarray,
-	    Contains the original 3D binary mask for a tumour
-	mask_spacing: 
-
+	    Contains the original 3D binary mask for a tumour. Should be resampled to isotropic to avoid any stretching/compression artifacts when converting
+		back to original NIFTI spacing
 	diam_change_bound: float
 	    The the upper/lower limit of percentage diameter change that is requested. Keep value bounded by [-80, 100] 
 	iter_start: int
@@ -117,32 +120,40 @@ def make_post_mask(mask_array: np.ndarray,
 
 	# Calculate starting diameter
 	middle_slice = locate_centre_slice(mask_array)
+
 	start_diam = get_major_axis(mask_array[middle_slice])
-	logger.info("Starting major axis length: %s", str(start_diam))
+	print("Starting major axis length: ", str(start_diam))
+	if start_diam == 0: 
+		return mask_array, 0, start_diam, start_diam, middle_slice
 	perc_diam_change = 0  # Initialize tracker for percentage volume change
 
 	# Choose dilation or erosion by sign of volume change
 	if diam_change_bound > 0:
-		logger.info('Dilation selected for a diameter change bound of %s', str(diam_change_bound))
+		print('Dilation selected for a diameter change bound of ', str(diam_change_bound))
 		first_flag = 1
 		while perc_diam_change <= diam_change_bound:
-			logger.info('Performing mask dilation')
+			print('Performing mask dilation')
 			curr_mask = ndi.binary_dilation(mask_array, footprint, iterations=iter_start)  # Perform the dilation
-			logger.info('Dilation complete')
+			print('Dilation complete')
 			curr_diam = get_major_axis(curr_mask[middle_slice])
-			logger.info("Current diameter: %s", str(curr_diam))
-			perc_diam_change = (curr_diam - start_diam) / start_diam * 100
-			logger.info('Current percent diameter change: %s', str(perc_diam_change))
-			if (perc_diam_change > diam_change_bound):  #If percentage change is now too big
-				if first_flag: #If the mask is too small to start, the dilation will not be able increase by fine amounts. Will return the current dilated mask.
-					logger.debug("Too small volume to dilate precisely. Returning the original mask")
+			print("Current diameter: ", str(curr_diam))
+			if curr_diam == 0: 
+				if first_flag:
 					return mask_array, 0, start_diam, start_diam, middle_slice
 				else: 
-					logger.info("Dilation now over upper bound. Returning the previous dilated mask")
+					return prev_mask, prev_perc_diam_change, start_diam, prev_diam, middle_slice
+			perc_diam_change = (curr_diam - start_diam) / start_diam * 100
+			print('Current percent diameter change: ', str(perc_diam_change))
+			if (perc_diam_change > diam_change_bound):  #If percentage change is now too big
+				if first_flag: #If the mask is too small to start, the dilation will not be able increase by fine amounts. Will return the current dilated mask.
+					print("Too small volume to dilate precisely. Returning the original mask")
+					return mask_array, 0, start_diam, start_diam, middle_slice
+				else: 
+					print("Dilation now over upper bound. Returning the previous dilated mask")
 					return prev_mask, prev_perc_diam_change, start_diam, prev_diam, middle_slice  #Take the previous mask iteration if this was not the first iteration
 				
 			elif perc_diam_change < diam_change_bound:
-				logger.info('Diameter change stil under the dilation upper bound. Continuing to iterate')
+				print('Diameter change stil under the dilation upper bound. Continuing to iterate')
 				prev_mask = curr_mask
 				prev_diam = curr_diam
 				prev_perc_diam_change = perc_diam_change
@@ -151,33 +162,38 @@ def make_post_mask(mask_array: np.ndarray,
 
 	# Negative diameter changes imply erosion
 	elif diam_change_bound < 0:
-		logger.info('Erosion selected for a diameter change bound of %s', str(diam_change_bound))
+		print('Erosion selected for a diameter change bound of ', str(diam_change_bound))
 		first_flag = 1
 		while perc_diam_change >= diam_change_bound:
-			logger.info('Performing mask erosion')
+			print('Performing mask erosion')
 			curr_mask = ndi.binary_erosion(mask_array, footprint, iterations=iter_start)  # Perform the erosion
-			logger.info('Erosion complete')
+			print('Erosion complete')
 			# Check if erosion has removed all mask 
-			if np.count_nonzero(curr_mask[middle_slice].astype(int)) == 0: # If there are no non-zero values in the current mask 
-				logger.debug("Erosion has caused disappearance of all non-zero values in mask. Returning previous mask.")
+			if np.count_nonzero(curr_mask[middle_slice].astype(int)) <=1: # If there are basically no pixels in mask 
+				print("Erosion has caused disappearance of all non-zero values in mask. Returning previous mask.")
 				if first_flag: 
 					return mask_array, 0, start_diam, start_diam, middle_slice
 				else: 
 					return prev_mask, prev_perc_diam_change, start_diam, prev_diam, middle_slice
 			curr_diam = get_major_axis(curr_mask[middle_slice])
-			logger.info("Current diameter: %s", str(curr_diam))
-			perc_diam_change = (curr_diam - start_diam) / start_diam * 100
-			logger.info('Current diameter change: %s', str(perc_diam_change))
-			if perc_diam_change < diam_change_bound: 
-				if first_flag: #If the mask is too small to start, the erosion will not be able decrease by fine amounts. Will return original mask 
-					logger.debug("Too small volume to erode precisely. Returning original mask")
+			print("Current diameter: ", str(curr_diam))
+			if curr_diam == 0:
+				if first_flag: 
 					return mask_array, 0, start_diam, start_diam, middle_slice
 				else: 
-					logger.info("Erosion now under lower bound. Returning the previous eroded mask")
+					return prev_mask, prev_perc_diam_change, start_diam, prev_diam, middle_slice
+			perc_diam_change = (curr_diam - start_diam) / start_diam * 100
+			print('Current diameter change: ', str(perc_diam_change))
+			if perc_diam_change < diam_change_bound: 
+				if first_flag: #If the mask is too small to start, the erosion will not be able decrease by fine amounts. Will return original mask 
+					print("Too small volume to erode precisely. Returning original mask")
+					return mask_array, 0, start_diam, start_diam, middle_slice
+				else: 
+					print("Erosion now under lower bound. Returning the previous eroded mask")
 					return prev_mask, prev_perc_diam_change, start_diam, prev_diam, middle_slice #Return the previous mask iteration if this was not the first iteration
 
 			elif perc_diam_change > diam_change_bound:
-				logger.info('Diameter change is still above the lower bound. Continuing to iterate.')
+				print('Diameter change is still above the lower bound. Continuing to iterate.')
 				prev_mask = curr_mask
 				prev_diam = curr_diam
 				prev_perc_diam_change = perc_diam_change
@@ -206,14 +222,121 @@ def get_recist_cat(diam_change: float):
 	else:
 		return 'PD'
 
-click.command() 
-click.option('--dataset')
-click.option('--disease_site')
-click.option('--save_folder_name')
+def run_one_sample(row: pd.Series, 
+				   dataset: str,
+				   disease_site: str,
+				   out_path: Path):
+	'''
+	Get one simulated second time point mask. To be used for parallel processing. 
+
+	Parameters
+	----------
+	row: pd.Series, 
+		A row containing NIFTI segmentation information from one of the mit index files 
+	get_summ_csv: bool 
+		A flag for whether or not to return a summary of information related to how the masks
+		were created and various morphological metadata
+
+	Returns
+	----------
+	get_summ_csv: pd.DataFrame
+		A summary of all of the dilations/erosions done on which files, how much of a change there was in terms of diameter 
+		and volume, and the simulated RECIST category.
+	'''
+	dataset_short = dataset.split("_")[-1] 
+	rel_filepath = row['filepath']
+	full_filepath = dirs.PROCDATA / disease_site / dataset / Path("images/mit_" + dataset_short) / Path(rel_filepath)
+
+	# Load in the NIFTI segmentation and get the relevant information for conversion 
+	nifti_seg = sitk.ReadImage(full_filepath)
+	
+	orig_spacing = nifti_seg.GetSpacing()
+	orig_direction = nifti_seg.GetDirection()
+	orig_origin = nifti_seg.GetOrigin()
+	unitary_vox_vol = orig_spacing[0] * orig_spacing[1] * orig_spacing[2]
+
+	# Resize the image to be isotropic 1x1x1 mm and get resized nifti mask array
+	resized_seg = resample(image = nifti_seg, 
+					spacing = 1, 
+					interpolation = 'nearest')
+
+	resized_seg = sitk.Cast(resized_seg, sitk.sitkUInt8)
+
+	nifti_mask = sitk.GetArrayFromImage(resized_seg)
+	 
+	#Check to make sure the mask has not disappeared after resampling 
+	if np.count_nonzero(nifti_mask) <= 1: 
+		print("No mask after resampling for ", rel_filepath)
+		print("Excluding from further downstream analysis")
+		return pd.DataFrame() #Return empty dataframe if there is no mask to dilate or erode
+	# Choose dilation or erosion at random 
+	diam_change_bound = 0
+	while diam_change_bound == 0: #Prevents no change, which causes issues with the dilation/erosion iterations 
+		diam_change_bound = random.randint(-99, 100)
+
+	t1_mask, perc_change, start_diam_pix, t1_diam_pix, mid_slice = make_post_mask(mask_array = nifti_mask, 
+																			diam_change_bound = diam_change_bound)
+	
+	# Get t0 and t1 volumes 
+	t0_vol = get_vox_vol(nifti_mask, unitary_vox_vol)
+	t1_vol = get_vox_vol(t1_mask, unitary_vox_vol)
+	vol_change = (t1_vol - t0_vol) / t0_vol * 100
+
+	# Give generated mask all necessary properties before exporting to NIFTI 
+	t1_img = sitk.GetImageFromArray(t1_mask.astype(int)) 
+	t1_img = resample(image = t1_img, 
+				spacing = orig_spacing, 
+				interpolation = 'nearest')
+	
+	t1_img = sitk.Cast(t1_img, sitk.sitkUInt8)
+
+	t1_img.SetSpacing(orig_spacing)
+	t1_img.SetDirection(orig_direction) 
+	t1_img.SetOrigin(orig_origin) 
+
+	img_savename = "_".join(rel_filepath.split("/")[:2])
+	img_savepath = out_path / Path(img_savename + ".nii.gz")
+	sitk.WriteImage(t1_img, img_savepath)
+
+	# Get simulated RECIST category 
+	recist_cat = get_recist_cat(perc_change)
+
+	# Write intermediate data to pandas dataframe 
+	cols = ['Filename', 
+		'PercChangeRequested', 
+		'ActualPercChange', 
+		'RECISTCat',
+		'T0DiamPix', 
+		'T1DiamPix', 
+		'MidSlice',
+		'T0VoxVol', 
+		'T1VoxVol', 
+		'VoxVolPercChange']
+	
+	curr_data = [rel_filepath, 
+				diam_change_bound, 
+				perc_change, 
+				recist_cat,
+				start_diam_pix, 
+				t1_diam_pix, 
+				mid_slice, 
+				t0_vol, 
+				t1_vol, 
+				vol_change]
+	
+	curr_df = pd.DataFrame([curr_data], columns = cols, index = [0]) 
+
+	return curr_df
+
+@click.command() 
+@click.option('--dataset')
+@click.option('--disease_site')
+@click.option('--save_folder_name')
+@click.option('--n_jobs')
 def run_sim_second_timepoint(dataset: str, 
 							 disease_site: str, 
 							 save_folder_name: Path, 
-							 get_summary_csv: bool = True): 
+							 n_jobs: int): 
 	'''
 	From ground truth segmentation NIFTI files, create a dilated or eroded version to mimic a treatment response, stable disease, or 
 	progression of disease. 
@@ -226,9 +349,8 @@ def run_sim_second_timepoint(dataset: str,
 		The anatomical area where the disease is located (corresponds to the folder name in the common data structure)
 	save_folder_name: Path
 		The name of the folder to store the modified masks in. Will be stored in data/procdata/<DISEASE_SITE>/<DATASET>/images
-	get_summary_csv: bool 
-		Save a summary of all of the dilations/erosions done on which files, how much of a change there was in terms of diameter 
-		and volume, and the simulated RECIST category. Default is true. Will be saved to save_folder_name. 
+	n_jobs: int
+		How many jobs to run in parallel.
 	'''
 	# Get relevant paths 
 	dataset_short = dataset.split("_")[-1] 
@@ -237,96 +359,28 @@ def run_sim_second_timepoint(dataset: str,
 	
 	if not out_path.exists():
 		out_path.mkdir(parents=True, exist_ok = True)
-
-	cols = ['Filename', 
-		 	'PercChangeRequested', 
-		 	'ActualPercChange', 
-		 	'RECISTCat',
-		 	'T0DiamPix', 
-		 	'T1DiamPix', 
-		 	'MidSlice',
-		 	'T0VoxVol', 
-		 	'T1VoxVol', 
-		 	'VoxVolPercChange']
 	
-	# Go through all that were processed 
+	# Go through all that were processed and run in parallel 
 	nifti_index = pd.read_csv(idx_nifti_path) 
 	seg_only_index = nifti_index[(nifti_index['Modality'] == 'RTSTRUCT') | (nifti_index['Modality'] == 'SEG')]
 
-	for _, row in seg_only_index.iterrows(): 
-		rel_filepath = row['filepath']
-		full_filepath = dirs.PROCDATA / disease_site / dataset / Path("images/mit_" + dataset_short) / Path(rel_filepath)
-
-		# Load in the NIFTI segmentation and get the relevant information for conversion 
-		nifti_seg = sitk.ReadImage(full_filepath)
-		nifti_mask = sitk.GetArrayFromImage(nifti_seg)
-
-		orig_spacing = nifti_seg.GetSpacing()
-		orig_direction = nifti_seg.GetDirection()
-		orig_origin = nifti_seg.GetOrigin()
-		unitary_vox_vol = orig_spacing[0] * orig_spacing[1] * orig_spacing[2]
-		# Choose dilation or erosion at random 
-		diam_change_bound = 0
-		while diam_change_bound == 0: #Prevents no change 
-			diam_change_bound = random.randint(-99, 100)
-
-		t1_mask, perc_change, start_diam_pix, t1_diam_pix, mid_slice = make_post_mask(mask_array = nifti_mask, 
-																				diam_change_bound = diam_change_bound)
-		
-		# Get t0 and t1 volumes 
-		t0_vol = get_vox_vol(nifti_mask, unitary_vox_vol)
-		t1_vol = get_vox_vol(t1_mask, unitary_vox_vol)
-		vol_change = (t1_vol - t0_vol) / t0_vol * 100
-
-		# Give generated mask all necessary properties before exporting to NIFTI 
-		t1_img = sitk.GetImageFromArray(t1_mask.astype(int)) 
-
-		t1_img.SetSpacing(orig_spacing)
-		t1_img.SetDirection(orig_direction) 
-		t1_img.SetOrigin(orig_origin) 
-
-		img_savename = "_".join(rel_filepath.split("/")[:2])
-		img_savepath = out_path / Path(img_savename + ".nii.gz")
-		sitk.WriteImage(t1_img, img_savepath)
-
-		# Get simulated RECIST category 
-		recist_cat = get_recist_cat(perc_change)
-
-		# Write intermediate data to pandas dataframe 
-		if get_summary_csv: 
-			curr_data = [rel_filepath, 
-						diam_change_bound, 
-						perc_change, 
-						recist_cat,
-						start_diam_pix, 
-						t1_diam_pix, 
-						mid_slice, 
-						t0_vol, 
-						t1_vol, 
-						vol_change]
-			
-			curr_df = pd.DataFrame([curr_data], columns = cols, index = [0]) 
-			if 'sim_t1_masks_info' not in locals(): 
-				sim_t1_masks_info = curr_df
-			else: 
-				sim_t1_masks_info = pd.concat([sim_t1_masks_info, curr_df], ignore_index = True).reset_index(drop = True) 
+	sim_info_results = Parallel(n_jobs = n_jobs)(delayed(run_one_sample)
+										(row = row, 
+									   	dataset = dataset, 
+									   	disease_site = disease_site, 
+									   	out_path = out_path)
+										for _, row in tqdm(seg_only_index.iterrows(), total = seg_only_index.shape[0]))
 	
-	if get_summary_csv: 
-		sim_t1_masks_info.to_csv(out_path / 'sim_t1_masks_summary.csv')
+	for sim_info in sim_info_results: 
+		if 'all_sim_info_df' not in locals(): 
+			all_sim_info_df = sim_info
+		else: 
+			all_sim_info_df = pd.concat([all_sim_info_df, sim_info])
 
+	all_sim_info_df.to_csv(out_path / 'sim_t1_masks_summary.csv')
+	
 if __name__ == '__main__': 
-	# Get current time for logging 
-	curr_datetime = datetime.datetime.now()
-	str_datetime = curr_datetime.strftime('%Y-%m-%d %H:%M:%S')
-	#Configure logger
-	logger = logging.getLogger(__name__)
-	logging.basicConfig(filename = dirs.LOGS / Path("sim_second_timepoint_" + str_datetime + ".log"), encoding='utf-8', level=logging.DEBUG)
-
-	run_sim_second_timepoint(dataset = 'TCIA_CPTAC-CCRCC', 
-						  disease_site = 'Abdomen', 
-						  save_folder_name = 't1_segs_test')
-							
-
+	run_sim_second_timepoint()
 
 	### PREVIOUS TESTING ###
 	# mask_img = sitk.ReadImage(test_mask)
@@ -375,3 +429,79 @@ if __name__ == '__main__':
 	# dilated_img.SetDirection(mask_img.GetDirection())
 	# dilated_img.SetOrigin(mask_img.GetOrigin())
 	# sitk.WriteImage(dilated_img, 'test_erosion_mask_sphere40_C3L-00792_0001_RTSTRUCT_617561.4.nii.gz')
+
+	### PREVIOUS CODE IN RUN SECOND SIM TIMEPOINT FUNCTION
+	# for _, row in seg_only_index.iterrows(): 
+	# 	rel_filepath = row['filepath']
+	# 	full_filepath = dirs.PROCDATA / disease_site / dataset / Path("images/mit_" + dataset_short) / Path(rel_filepath)
+
+	# 	# Load in the NIFTI segmentation and get the relevant information for conversion 
+	# 	nifti_seg = sitk.ReadImage(full_filepath)
+		
+	# 	orig_spacing = nifti_seg.GetSpacing()
+	# 	orig_direction = nifti_seg.GetDirection()
+	# 	orig_origin = nifti_seg.GetOrigin()
+	# 	unitary_vox_vol = orig_spacing[0] * orig_spacing[1] * orig_spacing[2]
+
+	# 	# Resize the image to be isotropic 1x1x1 mm and get resized nifti mask array
+	# 	resized_seg = resample(image = nifti_seg, 
+	# 				   spacing = 1, 
+	# 				   interpolation = 'nearest')
+
+	# 	resized_seg = sitk.Cast(resized_seg, sitk.sitkUInt8)
+
+	# 	nifti_mask = sitk.GetArrayFromImage(resized_seg)
+
+	# 	# Choose dilation or erosion at random 
+	# 	diam_change_bound = 0
+	# 	while diam_change_bound == 0: #Prevents no change 
+	# 		diam_change_bound = random.randint(-99, 100)
+
+	# 	t1_mask, perc_change, start_diam_pix, t1_diam_pix, mid_slice = make_post_mask(mask_array = nifti_mask, 
+	# 																			diam_change_bound = diam_change_bound)
+		
+	# 	# Get t0 and t1 volumes 
+	# 	t0_vol = get_vox_vol(nifti_mask, unitary_vox_vol)
+	# 	t1_vol = get_vox_vol(t1_mask, unitary_vox_vol)
+	# 	vol_change = (t1_vol - t0_vol) / t0_vol * 100
+
+	# 	# Give generated mask all necessary properties before exporting to NIFTI 
+	# 	t1_img = sitk.GetImageFromArray(t1_mask.astype(int)) 
+	# 	t1_img = resample(image = t1_img, 
+	# 				spacing = orig_spacing, 
+	# 				interpolation = 'nearest')
+		
+	# 	t1_img = sitk.Cast(t1_img, sitk.sitkUInt8)
+
+	# 	t1_img.SetSpacing(orig_spacing)
+	# 	t1_img.SetDirection(orig_direction) 
+	# 	t1_img.SetOrigin(orig_origin) 
+
+	# 	img_savename = "_".join(rel_filepath.split("/")[:2])
+	# 	img_savepath = out_path / Path(img_savename + ".nii.gz")
+	# 	sitk.WriteImage(t1_img, img_savepath)
+
+	# 	# Get simulated RECIST category 
+	# 	recist_cat = get_recist_cat(perc_change)
+
+	# 	# Write intermediate data to pandas dataframe 
+	# 	if get_summary_csv: 
+	# 		curr_data = [rel_filepath, 
+	# 					diam_change_bound, 
+	# 					perc_change, 
+	# 					recist_cat,
+	# 					start_diam_pix, 
+	# 					t1_diam_pix, 
+	# 					mid_slice, 
+	# 					t0_vol, 
+	# 					t1_vol, 
+	# 					vol_change]
+			
+	# 		curr_df = pd.DataFrame([curr_data], columns = cols, index = [0]) 
+	# 		if 'sim_t1_masks_info' not in locals(): 
+	# 			sim_t1_masks_info = curr_df
+	# 		else: 
+	# 			sim_t1_masks_info = pd.concat([sim_t1_masks_info, curr_df], ignore_index = True).reset_index(drop = True) 
+	
+	# if get_summary_csv: 
+	# 	sim_t1_masks_info.to_csv(out_path / 'sim_t1_masks_summary.csv')
