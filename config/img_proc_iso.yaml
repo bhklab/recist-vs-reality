@@ -1,0 +1,10 @@
+### Example configuration file for proc_images.sh 
+
+img_settings:
+    spacing: "1.0,1.0,1.0"
+
+file_settings: 
+    roi_match_substring: "GTV:.*"
+    file_format: "{PatientID}_{SampleNumber}/{Modality}_{SeriesInstanceUID}/{ImageID}.nii.gz"
+    modalities: "CT,RTSTRUCT,SEG"
+    unique_out_id: "test"
