@@ -48,6 +48,7 @@ scikit-learn = ">=1.8.0,<2"
 damply = ">=0.10.0, <0.11"
 med-imagetools = ">=2.12.0, <3"
 readii = ">=1.36.2, <2"
+opencv-python = ">=4.12.0.88, <5"
 
 [tasks]
 example_script = {cmd="python $SCRIPTS/example_script.py"}

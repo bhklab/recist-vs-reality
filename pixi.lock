@@ -392,6 +392,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f3/8d/5e5be3ced1d12966fefb5c4ea3b2a5b480afcea36406559442c6e31d4a48/multidict-6.7.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fd/55/b3b49a1b97aabcfbbd6c7326df9cb0b6fa0c0aefa8e89d500939e04aa229/opencv_python-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/46/4b/3aae6835b8e5f44ea6a68348ad90f78134047b503765087be2f9912140ea/propcache-0.4.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -726,6 +727,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fe/cf/18ef143a81610136d3da8193da9d80bfe1cb548a1e2d1c775f26b23d024a/multidict-6.7.1-cp312-cp312-macosx_10_13_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/33/7c/042abe49f58d6ee7e1028eefc3334d98ca69b030e3b567fe245a2b28ea6f/opencv_python-4.12.0.88-cp37-abi3-macosx_13_0_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/76/47/8ccf75935f51448ba9a16a71b783eb7ef6b9ee60f5d14c7f8a8a79fbeed7/propcache-0.4.1-cp312-cp312-macosx_10_13_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -1060,6 +1062,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a9/65/1caac9d4cd32e8433908683446eebc953e82d22b03d10d41a5f0fefe991b/multidict-6.7.1-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fc/6f/5a28fef4c4a382be06afe3938c64cc168223016fa520c5abaf37e8862aa5/opencv_python-4.13.0.92-cp37-abi3-macosx_13_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0a/b6/5c9a0e42df4d00bfb4a3cbbe5cf9f54260300c88a0e9af1f47ca5ce17ac0/propcache-0.4.1-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -1413,6 +1416,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/80/31/0b2517913687895f5904325c2069d6a3b78f66cc641a86a2baf75a05dcbb/multidict-6.7.1-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/e9/a5/1be1516390333ff9be3a9cb648c9f33df79d5096e5884b5df71a588af463/opencv_python-4.13.0.92-cp37-abi3-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/09/d19cff2a5aaac632ec8fc03737b223597b1e347416934c1b3a7df079784c/propcache-0.4.1-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -1832,6 +1836,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f3/8d/5e5be3ced1d12966fefb5c4ea3b2a5b480afcea36406559442c6e31d4a48/multidict-6.7.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fd/55/b3b49a1b97aabcfbbd6c7326df9cb0b6fa0c0aefa8e89d500939e04aa229/opencv_python-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/46/4b/3aae6835b8e5f44ea6a68348ad90f78134047b503765087be2f9912140ea/propcache-0.4.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -2177,6 +2182,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fe/cf/18ef143a81610136d3da8193da9d80bfe1cb548a1e2d1c775f26b23d024a/multidict-6.7.1-cp312-cp312-macosx_10_13_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/33/7c/042abe49f58d6ee7e1028eefc3334d98ca69b030e3b567fe245a2b28ea6f/opencv_python-4.12.0.88-cp37-abi3-macosx_13_0_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/76/47/8ccf75935f51448ba9a16a71b783eb7ef6b9ee60f5d14c7f8a8a79fbeed7/propcache-0.4.1-cp312-cp312-macosx_10_13_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -2522,6 +2528,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a9/65/1caac9d4cd32e8433908683446eebc953e82d22b03d10d41a5f0fefe991b/multidict-6.7.1-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fc/6f/5a28fef4c4a382be06afe3938c64cc168223016fa520c5abaf37e8862aa5/opencv_python-4.13.0.92-cp37-abi3-macosx_13_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0a/b6/5c9a0e42df4d00bfb4a3cbbe5cf9f54260300c88a0e9af1f47ca5ce17ac0/propcache-0.4.1-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -2886,6 +2893,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/80/31/0b2517913687895f5904325c2069d6a3b78f66cc641a86a2baf75a05dcbb/multidict-6.7.1-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/e9/a5/1be1516390333ff9be3a9cb648c9f33df79d5096e5884b5df71a588af463/opencv_python-4.13.0.92-cp37-abi3-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/09/d19cff2a5aaac632ec8fc03737b223597b1e347416934c1b3a7df079784c/propcache-0.4.1-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -3295,6 +3303,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f3/8d/5e5be3ced1d12966fefb5c4ea3b2a5b480afcea36406559442c6e31d4a48/multidict-6.7.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fd/55/b3b49a1b97aabcfbbd6c7326df9cb0b6fa0c0aefa8e89d500939e04aa229/opencv_python-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/46/4b/3aae6835b8e5f44ea6a68348ad90f78134047b503765087be2f9912140ea/propcache-0.4.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -3630,6 +3639,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fe/cf/18ef143a81610136d3da8193da9d80bfe1cb548a1e2d1c775f26b23d024a/multidict-6.7.1-cp312-cp312-macosx_10_13_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/33/7c/042abe49f58d6ee7e1028eefc3334d98ca69b030e3b567fe245a2b28ea6f/opencv_python-4.12.0.88-cp37-abi3-macosx_13_0_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/76/47/8ccf75935f51448ba9a16a71b783eb7ef6b9ee60f5d14c7f8a8a79fbeed7/propcache-0.4.1-cp312-cp312-macosx_10_13_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -3965,6 +3975,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a9/65/1caac9d4cd32e8433908683446eebc953e82d22b03d10d41a5f0fefe991b/multidict-6.7.1-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/fc/6f/5a28fef4c4a382be06afe3938c64cc168223016fa520c5abaf37e8862aa5/opencv_python-4.13.0.92-cp37-abi3-macosx_13_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0a/b6/5c9a0e42df4d00bfb4a3cbbe5cf9f54260300c88a0e9af1f47ca5ce17ac0/propcache-0.4.1-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -4319,6 +4330,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/96/9f/bd9ed3bc3b7a59ce12ac7bc6630e72b342602f7ba6daadffff3ad205a0dc/med_imagetools-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/80/31/0b2517913687895f5904325c2069d6a3b78f66cc641a86a2baf75a05dcbb/multidict-6.7.1-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/e9/a5/1be1516390333ff9be3a9cb648c9f33df79d5096e5884b5df71a588af463/opencv_python-4.13.0.92-cp37-abi3-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/0d/b4/fbeb1612aab895d592375692d29bc98710d7026067b9a97d8ea87d8d029c/orcestra_downloader-0.15.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/09/d19cff2a5aaac632ec8fc03737b223597b1e347416934c1b3a7df079784c/propcache-0.4.1-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/05/e8/108d641e8cc7f1a2bb8745132ba433569dfff6301cac77a0942e2f7f1ae1/pybytesize-0.8.1-py3-none-any.whl
@@ -11116,6 +11128,38 @@ packages:
   purls: []
   size: 223354
   timestamp: 1735727101839
+- pypi: https://files.pythonhosted.org/packages/33/7c/042abe49f58d6ee7e1028eefc3334d98ca69b030e3b567fe245a2b28ea6f/opencv_python-4.12.0.88-cp37-abi3-macosx_13_0_x86_64.whl
+  name: opencv-python
+  version: 4.12.0.88
+  sha256: 812eb116ad2b4de43ee116fcd8991c3a687f099ada0b04e68f64899c09448e81
+  requires_dist:
+  - numpy<2.0 ; python_full_version < '3.9'
+  - numpy>=2,<2.3.0 ; python_full_version >= '3.9'
+  requires_python: '>=3.6'
+- pypi: https://files.pythonhosted.org/packages/e9/a5/1be1516390333ff9be3a9cb648c9f33df79d5096e5884b5df71a588af463/opencv_python-4.13.0.92-cp37-abi3-win_amd64.whl
+  name: opencv-python
+  version: 4.13.0.92
+  sha256: 423d934c9fafb91aad38edf26efb46da91ffbc05f3f59c4b0c72e699720706f5
+  requires_dist:
+  - numpy<2.0 ; python_full_version < '3.9'
+  - numpy>=2 ; python_full_version >= '3.9'
+  requires_python: '>=3.6'
+- pypi: https://files.pythonhosted.org/packages/fc/6f/5a28fef4c4a382be06afe3938c64cc168223016fa520c5abaf37e8862aa5/opencv_python-4.13.0.92-cp37-abi3-macosx_13_0_arm64.whl
+  name: opencv-python
+  version: 4.13.0.92
+  sha256: caf60c071ec391ba51ed00a4a920f996d0b64e3e46068aac1f646b5de0326a19
+  requires_dist:
+  - numpy<2.0 ; python_full_version < '3.9'
+  - numpy>=2 ; python_full_version >= '3.9'
+  requires_python: '>=3.6'
+- pypi: https://files.pythonhosted.org/packages/fd/55/b3b49a1b97aabcfbbd6c7326df9cb0b6fa0c0aefa8e89d500939e04aa229/opencv_python-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl
+  name: opencv-python
+  version: 4.13.0.92
+  sha256: 620d602b8f7d8b8dab5f4b99c6eb353e78d3fb8b0f53db1bd258bb1aa001c1d5
+  requires_dist:
+  - numpy<2.0 ; python_full_version < '3.9'
+  - numpy>=2 ; python_full_version >= '3.9'
+  requires_python: '>=3.6'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.3-h5fbd93e_0.conda
   sha256: 5bee706ea5ba453ed7fd9da7da8380dd88b865c8d30b5aaec14d2b6dd32dbc39
   md5: 9e5816bc95d285c115a3ebc2f8563564
