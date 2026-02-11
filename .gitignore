@@ -11,6 +11,9 @@ __pycache__/
 *.png
 *.npz
 
+# Figure files
+!figures/*/*.png
+
 # Distribution / packaging
 .Python
 build/
