@@ -37,11 +37,13 @@ snakemake = ">=9.5.1,<10"
 click = ">=8.2.1,<9"
 scipy = ">=1.16.1,<2"
 sympy = ">=1.14.0,<2"
+scikit-learn = ">=1.8.0,<2"
 
 [pypi-dependencies]
 damply = ">=0.10.0, <0.11"
 med-imagetools = ">=2.12.0, <3"
 readii = ">=1.36.2, <2"
+opencv-python = ">=4.12.0.88, <5"
 
 [tasks]
 example_script = {cmd="python $SCRIPTS/example_script.py"}
