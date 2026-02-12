@@ -79,16 +79,9 @@ def subset_results_slices(mask_subset: list,
     # Load in the results csv 
     results_df = pd.read_csv(results_path) 
 
-    # Go through each of the paths in the list, find mask slice range, and compare to the results dataframe based on filename and slice range
+    # Go through each of the paths in the list, find mask slice range, and compare to the results dataframe based on filename
     for mask_path in mask_subset: 
-        curr_mask = sitk.ReadImage("data/procdata/MultiSite/" + mask_path)
-        curr_mask_arr = sitk.GetArrayFromImage(curr_mask)
-
-        gts_slices = str(list_nonzero_seg_slices(curr_mask_arr))
-
-        # Get current Patient ID and row to drop
-        patient_ID = mask_path.split("/")[-2]
-        row_to_drop = results_df[(results_df['filename'].str.contains(patient_ID, case=True)) & (results_df['GTSliceList'] == gts_slices)]
+        row_to_drop = results_df[results_df['filename'] == mask_path]
         
         # Drop the row
         results_df = results_df.drop([row_to_drop.index.tolist()[0]])
@@ -116,15 +109,11 @@ def align_gt_pred(filtered_idx: pd.DataFrame,
 
     #Iterate over all masks within the index file
     for mask_path in filtered_idx['mask_path'].values.tolist(): 
-        # Get current row from the index and the current mask information from the NIfTI file 
+        # Get current row from the index
         curr_idx_row = filtered_idx[filtered_idx['mask_path'] == mask_path]
 
-        curr_mask = sitk.ReadImage('data/procdata/MultiSite/' + mask_path) 
-        curr_mask_arr = sitk.GetArrayFromImage(curr_mask) 
-
-        # Get current Patient ID and row to align
-        path_match = "/".join(mask_path.split("/")[-3:]).removesuffix('.nii.gz') + "_pred.nii.gz" 
-        row_to_align = filtered_results[filtered_results['filename'].str.contains(path_match, case=True)]
+        # Get current row to align in results
+        row_to_align = filtered_results[filtered_results['filename'] == mask_path]
 
         # Check if there is no match, make note of it (this shouldn't happen but just in case)
         if row_to_align.empty: 
