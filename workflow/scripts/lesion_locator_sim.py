@@ -216,7 +216,8 @@ def get_vol_recist(vol_change: float):
     else: 
         return None
 
-def calc_recist_info(mask_path: Path): 
+def calc_recist_info(mask_path: Path, 
+                     axes_3d: bool = True): 
     """  
     From a mask image, calculate the RECIST diameter and the voxel volume based on the slice 
     with the largest pixel area. 
@@ -225,13 +226,19 @@ def calc_recist_info(mask_path: Path):
     ----------
     mask_path: Path
         The path to the current mask 
+    axes_3d: bool
+        Flag for calculating and exporting the diameters in the coronal and sagittal planes
     
     Returns
     ---------- 
     recist_len: float
         The largest axial diameter found 
     voxel_vol: float 
-        The voxel volume of the current mask 
+        The voxel volume of the current mask
+    coronal_len: float (optional) 
+        The largest diameter in the coronal plane
+    sagittal_len: float(optional) 
+        The largest diameter in the sagittal plane
     """
     # Read in mask image
     mask_img = sitk.ReadImage(mask_path) 
@@ -270,6 +277,40 @@ def calc_recist_info(mask_path: Path):
     unit_vol = spacing[0] * spacing[1] * spacing[2]
     voxel_vol = get_vox_vol(mask_array = mask_arr, 
                             unitary_vol = unit_vol) 
+    
+    if axes_3d: 
+        # Calculate the length of the coronal plane (z, x). Not checking for emptiness since that was checked above in axial plane
+        # TODO: double check orderig of planar orientation. Below assumes data stored as (z, x, y) 
+        coronal_sums = np.sum(mask_arr, axis = (0,1))
+        coronal_max_area_slice = np.argmax(coronal_sums)
+
+        coronal_bbox = mask2D_to_bbox(gt2D = mask_arr[:, :, coronal_max_area_slice], 
+                                      mask_path = mask_path)
+        
+        cor_coord1 = (float(coronal_bbox[1]), float(coronal_max_area_slice), float(coronal_bbox[0]))
+        cor_coord2 = (float(coronal_bbox[3]), float(coronal_max_area_slice), float(coronal_bbox[2]))
+
+        cor_phys1 = mask_img.TransformContinuousIndexToPhysicalPoint(cor_coord1)
+        cor_phys2 = mask_img.TransformContinuousIndexToPhysicalPoint(cor_coord2)
+
+        coronal_len = np.linalg.norm(np.array(cor_phys1) - np.array(cor_phys2))
+
+        # Calculate length of the sagittal plane (z, y). 
+        sagittal_sums = np.sum(mask_arr, axis = (0, 2))
+        sagittal_max_area_slice = np.argmax(sagittal_sums) 
+
+        sagittal_bbox = mask2D_to_bbox(gt2D = mask_arr[:, sagittal_max_area_slice, :], 
+                                       mask_path = mask_path)
+
+        sag_coord1 = (float(sagittal_max_area_slice), float(sagittal_bbox[1]), float(sagittal_bbox[0]))
+        sag_coord2 = (float(sagittal_max_area_slice), float(sagittal_bbox[3]), float(sagittal_bbox[2]))
+
+        sag_phys1 = mask_img.TransformContinuousIndexToPhysicalPoint(sag_coord1)
+        sag_phys2 = mask_img.TransformContinuousIndexToPhysicalPoint(sag_coord2) 
+
+        sagittal_len = np.linalg.norm(np.array(sag_phys1) - np.array(sag_phys2))
+
+        return recist_len, voxel_vol, coronal_len, sagittal_len 
     
     return recist_len, voxel_vol
 
@@ -355,20 +396,28 @@ def recist_eval_indiv(t1_mask_path: Path,
         statistics.
     """
     # Calculate the RECIST and volume information for the two timepont masks
-    t1_recist_len, t1_vox_vol = calc_recist_info(mask_path = t1_mask_path) 
-    t2_recist_len, t2_vox_vol = calc_recist_info(mask_path = t2_mask_path) 
+    t1_recist_len, t1_vox_vol, t1_cor_len, t1_sag_len = calc_recist_info(mask_path = t1_mask_path) 
+    t2_recist_len, t2_vox_vol, t2_cor_len, t2_sag_len = calc_recist_info(mask_path = t2_mask_path) 
 
+    # Get the volume of a smooth ellipsoid derived from the semi-axis measurements (half of each of the RECIST, coronal, and sagittal lengths)
+    t1_ell_vol = 4/3 * np.pi * (t1_recist_len/2) * (t1_cor_len/2) * (t1_sag_len/2)
+    t2_ell_vol = 4/3 * np.pi * (t2_recist_len/2) * (t2_cor_len/2) * (t2_sag_len/2)
+    
     # Get the percentage change over time for both the RECIST diameter and volume measurements 
     diam_perc_change = get_indiv_percdiam_change(measure_t1 = t1_recist_len, 
                                                  measure_t2 = t2_recist_len) 
     vol_perc_change = get_indiv_percdiam_change(measure_t1 = t1_vox_vol, 
                                                 measure_t2 = t2_vox_vol) 
+    ell_vol_perc_change = get_indiv_percdiam_change(measure_t1 = t1_ell_vol, 
+                                                    measure_t2 = t2_ell_vol)
     
     # Calculate the RECIST category for this tumour 
     recist_cat = get_recist_tum(diam_change = diam_perc_change) 
 
     vol_recist_cat = get_vol_recist(vol_change = vol_perc_change)
 
+    ell_vol_recist_cat = get_vol_recist(vol_change = ell_vol_perc_change)
+    
     # Summarize all information into a dataframe 
     col_names = ['t1_mask_path',
                  't2_mask_path',
@@ -376,10 +425,17 @@ def recist_eval_indiv(t1_mask_path: Path,
                  't2_max_ax_diam', 
                  't1_vox_vol', 
                  't2_vox_vol', 
+                 't1_cor_len', 
+                 't2_cor_len', 
+                 't1_sag_len', 
+                 't2_sag_len', 
+                 't1_ell_vol', 
+                 't2_ell_vol',
                  'perc_diam_change', 
                  'perc_vol_change', 
                  'RECIST_cat',
-                 'vol_RECIST_cat'
+                 'vol_RECIST_cat', 
+                 'ell_vol_RECIST_cat'
     ]
 
     curr_info = [t1_mask_path, 
@@ -388,10 +444,17 @@ def recist_eval_indiv(t1_mask_path: Path,
                  t2_recist_len, 
                  t1_vox_vol, 
                  t2_vox_vol, 
+                 t1_cor_len, 
+                 t2_cor_len, 
+                 t1_sag_len, 
+                 t2_sag_len, 
+                 t1_ell_vol, 
+                 t2_ell_vol,
                  diam_perc_change, 
                  vol_perc_change, 
                  recist_cat, 
-                 vol_recist_cat]
+                 vol_recist_cat, 
+                 ell_vol_recist_cat]
     
     recist_summary = pd.DataFrame([curr_info], columns = col_names, index = [0]) 
     
@@ -485,7 +548,9 @@ def run_one_samp_plot_data(t1_gt_mask_path: Path,
     plotting_data = pd.concat(plot_data_list, axis = 1)
 
     plotting_data['RECIST_flip'] = plotting_data['GT_RECIST_cat'] != plotting_data['PRED_RECIST_cat']
-
+    plotting_data['vol_RECIST_flip'] = plotting_data['GT_vol_RECIST_cat'] != plotting_data['PRED_vol_RECIST_cat']
+    plotting_data['ell_vol_RECIST_flip'] = plotting_data['GT_ell_vol_RECIST_cat'] != plotting_data['PRED_ell_vol_RECIST_cat']
+    
     return plotting_data
 
 def get_merge_data(mask_path): 
@@ -520,7 +585,7 @@ def run_get_sim_data(align_t1_path: Path,
     Parameters 
     ----------
     align_t1_path: Path 
-        The path to the aligned AAuRA index and results file for the first timepoint. Assumes csv. 
+        The path to the aligned AAuRA index and results file for the first timepoint. Assumes csv.
     align_t2_path: Path
         The path to the aligned AAuRA index and results file for the second timepoint. Assumes csv.
     n_jobs: int 
@@ -532,7 +597,10 @@ def run_get_sim_data(align_t1_path: Path,
 
     # Put correct suffix in the filename position
     align_t1_df['filename'] = align_t1_df['filename'].str.replace('.nii.gz', '_pred_PTS_25_75_BBOX_MINAX.nii.gz')
-    align_t1_df['filename'] = align_t2_df['filename'].str.replace('.nii.gz', '_pred_PTS_25_75_BBOX_MINAX.nii.gz')
+    align_t1_df['filename'] = align_t1_df['filename'].str.replace('images', 'nnInt_pts_run')
+
+    align_t2_df['filename'] = align_t2_df['filename'].str.replace('.nii.gz', '_pred_PTS_25_75_BBOX_MINAX.nii.gz')
+    align_t2_df['filename'] = align_t2_df['filename'].str.replace('images', 'nnInt_pts_run')
 
     # Give each of the dataframes a prefix for their columns so they can be concatenated (for parallel processing) 
     # and create a common column to merge on so all information can be aligned correctly
@@ -557,8 +625,8 @@ def run_get_sim_data(align_t1_path: Path,
     sim_plot_data = Parallel(n_jobs = n_jobs)(delayed(run_one_samp_plot_data)
                                            (t1_gt_mask_path = 'data/procdata/MultiSite/' + row['t1_mask_path'],
                                             t2_gt_mask_path = 'data/procdata/MultiSite/' + row['t2_mask_path'],
-                                            t1_pred_mask_path = row['t1_filename'],	
-                                            t2_pred_mask_path = row['t2_filename'],
+                                            t1_pred_mask_path = 'data/results/MultiSite/' + row['t1_filename'],	
+                                            t2_pred_mask_path = 'data/results/MultiSite/' + row['t2_filename'],
                                             t1_DICE = row['t1_volume_dice'],
                                             t2_DICE = row['t2_volume_dice'],
                                             t1_H95 = row['t1_hausdorff'],
@@ -574,7 +642,7 @@ def run_get_sim_data(align_t1_path: Path,
             sim_plot_data_df = pd.concat([sim_plot_data_df, plot_data], ignore_index = True)
     
     # Save plotting information 
-    sim_plot_data_df.to_csv('ll_sim_plotting_info.csv', index = False)
+    sim_plot_data_df.to_csv('nnInt_ll_sim_plotting_info_pts.csv', index = False)
 
 if __name__ == '__main__': 
     run_get_sim_data()
