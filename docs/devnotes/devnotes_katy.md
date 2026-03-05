@@ -1,5 +1,9 @@
 # Developer Notes - Katy
 
+## PASTA evaluation
+So for some reason, when I resample the ground truth segmentation files, the array gets flip in the saggital and coronal axes, so need to flip back before comparing
+
+
 ## SR Exploration
 
 #### [2025-06-04]
