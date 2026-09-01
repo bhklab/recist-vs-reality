@@ -26,7 +26,7 @@ env.SCRIPTS = "${PIXI_PROJECT_ROOT}/workflow/scripts"
 [dependencies]
 python = ">=3.12"
 ipython = "*"
-ipykernel = "*"
+ipykernel = ">=7.2.0,<8"
 jupyterlab = "*"
 pip = "*"
 pydicom = ">=3.0.1,<4"
@@ -41,18 +41,26 @@ sympy = ">=1.14.0,<2"
 scikit-image = ">=0.25.2,<0.26"
 plotly = ">=6.3.1,<7"
 monai = ">=1.5.1,<2"
+tqdm = ">=4.67.1,<5"
+scikit-learn = ">=1.8.0,<2"
+numpy = ">=2,<2.3.0"
 
 [pypi-dependencies]
 damply = ">=0.10.0, <0.11"
 med-imagetools = ">=2.12.0, <3"
 readii = ">=1.36.2, <2"
+opencv-python = ">=4.12.0.88, <5"
 
 [tasks]
 example_script = {cmd="python $SCRIPTS/example_script.py"}
 
-[tasks.mit]
-args = ["config"]
-cmd = "snakemake -c 7 --configfile {{ config }}"
+[tasks.evaluate-predictions]
+args = ['model', 'disease_region', 'dataset']
+cmd = "python workflow/scripts/get_medsam2recist_metrics.py {{ dataset }} {{ disease_region }} {{ model }}"
+
+[tasks.format-metrics]
+args = ['model', 'disease_region', 'dataset']
+cmd = "python workflow/scripts/utils/format_metrics.py data/results/{{ model }}/{{ disease_region }}/{{ dataset }}/metric_eval/medsam2recist_seg_eval.csv"
 
 [tasks.srscrape]
 args = ["dataset", { "arg" = "overwrite", "default" = "False" }]
